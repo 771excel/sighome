@@ -224,7 +224,7 @@ document.addEventListener('alpine:init', () => {
         loadCloudData() {
             if (!this.db || !this.userId) return; 
             
-            const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
+            const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
 
             this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
                 if (snapshot.exists()) {
@@ -271,7 +271,7 @@ document.addEventListener('alpine:init', () => {
         saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
-            const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
+            const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
             
             const itemConfigs = this.items.map(i => ({
                 id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
