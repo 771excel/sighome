@@ -6,14 +6,11 @@
     <meta name="referrer" content="no-referrer">
     <title>771 시그니처 뷰어</title>
     
+    <!-- CDN 라이브러리 로드 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-    
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-
     <script src="https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js"></script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script type="module">
@@ -107,6 +104,7 @@
                 events: [], 
                 members: [], 
                 items: [], 
+                _placeholderStr: null,
 
                 init() {
                     const d = new Date();
@@ -115,10 +113,9 @@
                     const urlParams = new URLSearchParams(window.location.search);
                     if (urlParams.get('viewer') === 'true') {
                         this.isViewerMode = true;
-                        
-                        document.addEventListener('contextmenu', e => e.preventDefault());
-                        document.addEventListener('dragstart', e => e.preventDefault());
-                        document.addEventListener('selectstart', e => e.preventDefault());
+                        document.addEventListener('contextmenu', e => { if(e.target.tagName !== 'INPUT') e.preventDefault(); });
+                        document.addEventListener('dragstart', e => { if(e.target.tagName !== 'INPUT') e.preventDefault(); });
+                        document.addEventListener('selectstart', e => { if(e.target.tagName !== 'INPUT') e.preventDefault(); });
                     }
 
                     this.initDragScroll(); 
@@ -160,7 +157,7 @@
                     };
                     setTimeout(() => {
                         if (!this.isViewerMode) attach(this.$refs.leftPanel);
-                        if (!this.isViewerMode) attach(this.$refs.rightPanel); 
+                        attach(this.$refs.rightPanel); 
                     }, 100);
                 },
 
@@ -170,47 +167,22 @@
                         return;
                     }
                     try {
-                        let firebaseConfig;
-                        try {
-                            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-                        } catch (e) {}
-
-                        if (!firebaseConfig) {
-                            firebaseConfig = {
-                                apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
-                                authDomain: "excel-ec5e4.firebaseapp.com",
-                                projectId: "excel-ec5e4",
-                                storageBucket: "excel-ec5e4.firebasestorage.app",
-                                messagingSenderId: "427552489685",
-                                appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
-                                measurementId: "G-TGR2BVMHD4"
-                            };
-                        }
+                        const firebaseConfig = {
+                            apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
+                            authDomain: "excel-ec5e4.firebaseapp.com",
+                            projectId: "excel-ec5e4",
+                            storageBucket: "excel-ec5e4.firebasestorage.app",
+                            messagingSenderId: "427552489685",
+                            appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
+                            measurementId: "G-TGR2BVMHD4"
+                        };
 
                         const app = window.firebaseDeps.initializeApp(firebaseConfig);
                         this.db = window.firebaseDeps.getFirestore(app);
                         this.appId = typeof __app_id !== 'undefined' ? __app_id : 'excel-signature-board';
 
                         const auth = window.firebaseDeps.getAuth(app);
-                        
-                        const initAuth = async () => {
-                            try {
-                                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                    await window.firebaseDeps.signInWithCustomToken(auth, __initial_auth_token);
-                                } else {
-                                    await window.firebaseDeps.signInAnonymously(auth);
-                                }
-                            } catch (err) {
-                                console.warn("인증 실패, 우회 시도:", err);
-                                try {
-                                    await window.firebaseDeps.signInAnonymously(auth);
-                                } catch (err2) {
-                                    console.error("익명 로그인도 실패:", err2);
-                                }
-                            }
-                        };
-                        
-                        await initAuth();
+                        await window.firebaseDeps.signInAnonymously(auth);
 
                         window.firebaseDeps.onAuthStateChanged(auth, (user) => {
                             if (user) {
@@ -220,17 +192,18 @@
                                 this.userId = null;
                             }
                         });
-
                     } catch(e) {
                         console.error("Firebase 초기화 오류:", e);
                     }
                 },
 
+                // 🚨 핵심 픽스: 예전 개인 저장경로 복구 (데이터 유실 방지)
                 loadCloudData() {
                     if (!this.db || !this.userId || this._unsubscribe) return; 
                     
                     const { doc, onSnapshot } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'boards', 'main_board');
+                    // 예전 버전에서 저장하셨던 개인별 고유 세팅 경로로 완벽 복구
+                    const configDoc = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'settings', 'signature_settings');
 
                     this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
                         if (snapshot.exists()) {
@@ -246,6 +219,7 @@
                                     const existingItem = this.items.find(i => i.id === conf.id);
                                     if(existingItem) {
                                         Object.assign(existingItem, conf);
+                                        // 🚨 이미지 외부링크 덮어씌우기 누락 버그 완벽 수정
                                         if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
                                         else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
                                     } else {
@@ -266,10 +240,7 @@
                             setTimeout(() => { this.isSyncing = false; }, 100);
                         }
                     }, (error) => {
-                        console.error("Firestore 동기화 권한 에러:", error);
-                        if (error.code === 'permission-denied') {
-                            this.showToast("에러: 파이어베이스의 읽기/쓰기 권한이 막혀있습니다.");
-                        }
+                        console.error("Firestore 동기화 에러:", error);
                     });
                 },
 
@@ -277,7 +248,7 @@
                     if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
                     
                     const { doc, setDoc } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'boards', 'main_board');
+                    const configDoc = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'settings', 'signature_settings');
                     
                     const itemConfigs = this.items.map(i => ({
                         id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
@@ -293,7 +264,6 @@
                         itemConfigs: itemConfigs
                     }, {merge: true}).catch(e => {
                         console.error("저장 권한 에러:", e);
-                        this.showToast("저장 실패: 파이어베이스 권한을 확인해주세요.");
                     });
                 },
 
@@ -314,31 +284,22 @@
 
                     try {
                         if (window.showSaveFilePicker) {
-                            const handle = await window.showSaveFilePicker({
-                                suggestedName: filename,
-                                types: [{ description: 'JSON Backup', accept: { 'application/json': ['.json'] } }],
-                            });
+                            const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'JSON Backup', accept: { 'application/json': ['.json'] } }] });
                             const writable = await handle.createWritable();
-                            await writable.write(jsonString);
-                            await writable.close();
-                            this.showToast("설정 백업 파일이 선택한 폴더에 성공적으로 저장되었습니다.");
+                            await writable.write(jsonString); await writable.close();
+                            this.showToast("설정 백업 파일이 저장되었습니다.");
                         } else {
                             const blob = new Blob([jsonString], { type: 'application/json' });
                             const url = URL.createObjectURL(blob);
                             this.triggerDownload(url, filename);
                             this.showToast("백업 파일이 다운로드되었습니다.");
                         }
-                    } catch (e) {
-                        if (e.name !== 'AbortError') console.error(e);
-                    }
+                    } catch (e) { if (e.name !== 'AbortError') console.error(e); }
                 },
 
                 async exportFrozenImagesZip() {
                     const frozenItems = this.items.filter(i => i.isFrozen && i.frozenDataUrl);
-                    if (frozenItems.length === 0) {
-                        this.showToast("현재 캡처(고정)된 썸네일이 없습니다. 스튜디오에서 프레임을 먼저 캡처해주세요.");
-                        return;
-                    }
+                    if (frozenItems.length === 0) { this.showToast("캡처(고정)된 썸네일이 없습니다."); return; }
                     
                     try {
                         const zip = new JSZip();
@@ -347,15 +308,11 @@
                             const cleanName = this.cleanName(item.name);
                             zip.file(`${item.id}_${cleanName}_캡처.webp`, base64Data, {base64: true});
                         });
-                        
                         const content = await zip.generateAsync({type:"blob"});
                         const url = URL.createObjectURL(content);
                         this.triggerDownload(url, `캡처_썸네일_일괄백업_${this.lastModified}.zip`);
-                        this.showToast("ZIP 압축 백업이 완료되었습니다.");
-                    } catch(e) {
-                        console.error("ZIP 생성 오류:", e);
-                        this.showToast("ZIP 파일 생성 중 오류가 발생했습니다.");
-                    }
+                        this.showToast("ZIP 백업이 완료되었습니다.");
+                    } catch(e) { console.error("ZIP 생성 오류:", e); }
                 },
 
                 importSettings(e) {
@@ -391,16 +348,15 @@
                             }
                             this.reassignGroups();
                             this.saveCloudData(); 
-                            this.showToast("설정이 성공적으로 복구되었습니다! (웹 링크 연동 기준)");
-                        } catch(err) {
-                            this.showToast("설정 파일을 읽는 중 오류가 발생했습니다.");
-                        }
+                            this.showToast("설정이 성공적으로 복구되었습니다!");
+                        } catch(err) { this.showToast("설정 파일을 읽는 중 오류가 발생했습니다."); }
                     };
                     reader.readAsText(file);
                     e.target.value = '';
                 },
 
                 getPlaceholderImage() {
+                    if(this._placeholderStr) return this._placeholderStr;
                     const canvas = document.createElement('canvas');
                     canvas.width = 400; canvas.height = 225; 
                     const ctx = canvas.getContext('2d');
@@ -411,19 +367,29 @@
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText('이미지 준비중', 200, 112);
-                    return canvas.toDataURL('image/png');
+                    this._placeholderStr = canvas.toDataURL('image/png');
+                    return this._placeholderStr;
+                },
+
+                handleImageError(el, item) {
+                    const p = this.getPlaceholderImage();
+                    if (el.src !== p) {
+                        el.src = p;
+                        if (item && item.imgUrl && item.imgUrl.startsWith('blob:')) {
+                            // 로컬 Blob이 파기된 경우 사용자에게 알림
+                            this.showToast("로컬 파일 세션이 만료되었습니다. 폴더를 재업로드해주세요.");
+                        }
+                    }
                 },
 
                 handleFolderUpload(e) {
                     const files = e.target.files;
                     let tempMap = {}; 
 
-                    // [핵심 버그 수정] 브라우저 GC(가비지 컬렉션) 방지 로직
-                    // 원본 File 객체가 메모리에서 삭제되어 생성된 Blob URL이 엑스박스나 끊김 현상으로 변하는 것을 방지합니다.
                     if (!window.localFileCache) window.localFileCache = [];
 
                     for (let file of files) {
-                        window.localFileCache.push(file); // 메모리에 파일을 강제로 쥐어주기 (GC 방지)
+                        window.localFileCache.push(file); 
 
                         const match = file.name.match(/^(\d+)/);
                         if (!match) continue;
@@ -493,38 +459,6 @@
                     this.showToast("로컬 폴더 파일이 안전하게 업로드되었습니다.");
                 },
 
-                autoLinkWebAssets() {
-                    if(!this.webAssetBaseUrl.trim()) { this.showToast("폴더 주소를 입력해주세요."); return; }
-                    let count = 0;
-                    const baseUrl = this.webAssetBaseUrl.trim();
-                    
-                    this.items.forEach(item => {
-                        let updated = false;
-                        if(this.webAssetImgExt) {
-                            const url = `${baseUrl}${item.id}${this.webAssetImgExt}`;
-                            item.mediaUrl = url;
-                            item.isGif = this.webAssetImgExt === '.gif';
-                            item.hasImage = true;
-                            
-                            if (item.isFrozen && item.frozenDataUrl) {
-                                item.originalGifUrl = url;
-                            } else {
-                                item.imgUrl = url;
-                            }
-                            updated = true;
-                        }
-                        if(this.webAssetAudioExt) {
-                            item.audioUrl = `${baseUrl}${item.id}${this.webAssetAudioExt}`;
-                            item.hasAudio = true;
-                            updated = true;
-                        }
-                        if(updated) count++;
-                    });
-                    
-                    this.saveCloudData();
-                    this.showToast(`${count}개의 시그니처에 웹 서버 주소가 성공적으로 매핑되었습니다!`);
-                },
-
                 importExcelLinks(e) {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -545,9 +479,7 @@
                                 if (!row) return "";
                                 for (let j = 2; j < row.length; j++) {
                                     const val = String(row[j] || "").trim();
-                                    if (val.startsWith("http://") || val.startsWith("https://")) {
-                                        return val;
-                                    }
+                                    if (val.startsWith("http://") || val.startsWith("https://")) { return val; }
                                 }
                                 return "";
                             };
@@ -555,7 +487,6 @@
                             for (let i = 2; i < json.length; i += 3) {
                                 const row1 = json[i];
                                 const row2 = json[i+1];
-
                                 if (!row1 || row1.length === 0) continue;
 
                                 const id = parseInt(row1[0], 10);
@@ -563,25 +494,16 @@
 
                                 let url1 = findUrlInRow(row1);
                                 let url2 = findUrlInRow(row2);
-
-                                let audioUrl = "";
-                                let mediaUrl = "";
-
+                                let audioUrl = ""; let mediaUrl = "";
                                 let urls = [];
                                 if (url1) urls.push(url1);
                                 if (url2) urls.push(url2);
 
                                 urls.forEach(url => {
                                     url = url.replace(/^http:\/\//i, 'https://');
-                                    
-                                    if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(url)) {
-                                        audioUrl = url;
-                                    } else if (/\.(gif|png|jpg|jpeg|webp)(\?.*)?$/i.test(url)) {
-                                        mediaUrl = url;
-                                    } else {
-                                        if (!audioUrl) audioUrl = url;
-                                        else if (!mediaUrl) mediaUrl = url;
-                                    }
+                                    if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(url)) audioUrl = url;
+                                    else if (/\.(gif|png|jpg|jpeg|webp)(\?.*)?$/i.test(url)) mediaUrl = url;
+                                    else { if (!audioUrl) audioUrl = url; else if (!mediaUrl) mediaUrl = url; }
                                 });
 
                                 let isNewMark = false;
@@ -594,45 +516,22 @@
                                 let item = this.items.find(x => x.id === id);
                                 if (item) {
                                     let changed = false;
-                                    if (audioUrl) {
-                                        item.audioUrl = audioUrl;
-                                        item.hasAudio = true;
-                                        changed = true;
-                                    }
+                                    if (audioUrl) { item.audioUrl = audioUrl; item.hasAudio = true; changed = true; }
                                     if (mediaUrl) {
-                                        item.mediaUrl = mediaUrl;
-                                        item.originalGifUrl = mediaUrl; 
-                                        if (!item.isFrozen || !item.frozenDataUrl) {
-                                            item.imgUrl = mediaUrl;
-                                        }
-                                        item.hasImage = true;
-                                        item.isGif = mediaUrl.toLowerCase().includes('.gif');
-                                        changed = true;
+                                        item.mediaUrl = mediaUrl; item.originalGifUrl = mediaUrl; 
+                                        if (!item.isFrozen || !item.frozenDataUrl) item.imgUrl = mediaUrl;
+                                        item.hasImage = true; item.isGif = mediaUrl.toLowerCase().includes('.gif'); changed = true;
                                     }
-                                    if (isNewMark && !item.isNew) {
-                                        item.isNew = true;
-                                        changed = true;
-                                    }
+                                    if (isNewMark && !item.isNew) { item.isNew = true; changed = true; }
                                     if (changed) updatedCount++;
                                 } else {
-                                    let newItem = {
-                                        id: id,
-                                        name: cleanName,
-                                        imgUrl: mediaUrl || this.getPlaceholderImage(),
-                                        audioUrl: audioUrl || '',
-                                        mediaUrl: mediaUrl || '',
-                                        hasAudio: !!audioUrl,
-                                        hasImage: !!mediaUrl,
-                                        isGif: mediaUrl ? mediaUrl.toLowerCase().includes('.gif') : false,
-                                        isFrozen: false,
-                                        originalGifUrl: mediaUrl || '',
-                                        frozenDataUrl: null,
-                                        isNew: isNewMark,
-                                        isPersonal: false,
-                                        memberId: '',
-                                        groupId: this.findGroupForId(id)
-                                    };
-                                    this.items.push(newItem);
+                                    this.items.push({
+                                        id: id, name: cleanName, imgUrl: mediaUrl || this.getPlaceholderImage(), audioUrl: audioUrl || '',
+                                        mediaUrl: mediaUrl || '', hasAudio: !!audioUrl, hasImage: !!mediaUrl,
+                                        isGif: mediaUrl ? mediaUrl.toLowerCase().includes('.gif') : false, isFrozen: false,
+                                        originalGifUrl: mediaUrl || '', frozenDataUrl: null, isNew: isNewMark, isPersonal: false,
+                                        memberId: '', groupId: this.findGroupForId(id)
+                                    });
                                     addedCount++;
                                 }
                             }
@@ -642,32 +541,32 @@
                                 this.saveCloudData();
                                 this.showToast(`엑셀 동기화 완료! (새로 생성: ${addedCount}개 / 업데이트: ${updatedCount}개)`);
                             } else {
-                                this.showToast("가져올 데이터(링크 또는 항목)를 찾지 못했습니다. 양식을 다시 확인해주세요.");
+                                this.showToast("가져올 데이터(링크 또는 항목)를 찾지 못했습니다.");
                             }
-
-                        } catch (err) {
-                            console.error(err);
-                            this.showToast("엑셀 파일을 분석하는 중 오류가 발생했습니다.");
-                        }
+                        } catch (err) { console.error(err); this.showToast("엑셀 파일을 분석하는 중 오류가 발생했습니다."); }
                         e.target.value = ''; 
                     };
                     reader.readAsArrayBuffer(file);
                 },
 
                 playAudio(item) {
-                    if(!item.audioUrl) return;
-                    const audioId = 'audio_player_' + item.id;
-                    let audio = document.getElementById(audioId);
-                    if(audio) {
-                        if(audio.paused) {
-                            document.querySelectorAll('audio').forEach(a => a.pause());
-                            audio.play();
-                        } else {
-                            audio.pause();
+                    if(!item.audioUrl) { this.showToast("연결된 음원이 없습니다."); return; }
+                    
+                    if (this._activeAudio) {
+                        this._activeAudio.pause();
+                        if (this._activeAudio.src.endsWith(item.audioUrl) && !this._activeAudio.ended) {
+                            this._activeAudio = null;
+                            this.showToast("음원 재생 정지");
+                            return; 
                         }
-                    } else {
-                        this.showToast("오디오 파일을 찾을 수 없습니다.");
                     }
+                    this._activeAudio = new Audio(item.audioUrl);
+                    this._activeAudio.play().then(() => {
+                        this.showToast(`🎵 [${item.id}] 재생 중...`);
+                    }).catch(err => {
+                        console.error(err);
+                        this.showToast("음원을 재생할 수 없습니다.");
+                    });
                 },
 
                 findGroupForId(id) {
@@ -707,7 +606,11 @@
                 },
                 getPersonalItemsByMember(memberId) { return this.items.filter(i => i.isPersonal && i.memberId === memberId); },
                 getUnassignedPersonalItems() { return this.items.filter(i => i.isPersonal && !i.memberId); },
-                get newItems() { return this.items.filter(i => i.isNew); },
+                
+                // 🚨 NEW 아이템 반환 함수화 (반응성 버그 해결)
+                getNewItems() { 
+                    return this.items.filter(i => i.isNew).sort((a, b) => a.id - b.id); 
+                },
 
                 get filteredItems() {
                     let result = this.items;
@@ -739,37 +642,25 @@
                 openGifModal(item) {
                     this.modalItem = item;
                     this.modalOpen = true;
-                    
-                    this.gifTotalFrames = 0;
-                    this.gifCurrentFrame = 0;
-                    this.isGifLoading = false;
-                    this.isPlaying = false;
+                    this.gifTotalFrames = 0; this.gifCurrentFrame = 0;
+                    this.isGifLoading = false; this.isPlaying = false;
                     if(this.gifInterval) clearInterval(this.gifInterval);
-
-                    if (item.isGif && !item.isFrozen) {
-                        this.$nextTick(() => { this.initSuperGif(); });
-                    }
+                    if (item.isGif && !item.isFrozen) { this.$nextTick(() => { this.initSuperGif(); }); }
                 },
                 async initSuperGif() {
-                    if (typeof SuperGif === 'undefined') {
-                        this.showToast('GIF 디코딩 라이브러리를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.');
-                        return;
-                    }
+                    if (typeof SuperGif === 'undefined') { this.showToast('라이브러리를 불러올 수 없습니다.'); return; }
                     this.isGifLoading = true;
                     const container = document.getElementById('modal_gif_container');
-                    
                     let targetUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
                     let objectUrl = null;
 
                     try {
                         const response = await fetch(targetUrl, { cache: "no-store" });
-                        if (!response.ok) throw new Error('Network response was not ok');
+                        if (!response.ok) throw new Error('Network error');
                         const blob = await response.blob();
                         objectUrl = URL.createObjectURL(blob);
                         targetUrl = objectUrl;
-                    } catch (e) {
-                        console.warn("CORS fetch failed, using original URL fallback", e);
-                    }
+                    } catch (e) { console.warn("CORS fetch failed", e); }
                     
                     container.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
                     const img = document.getElementById('modal_gif_target');
@@ -777,7 +668,7 @@
                     const fallbackTimer = setTimeout(() => {
                         if(this.isGifLoading) {
                             this.isGifLoading = false;
-                            this.showToast('GIF 파일 용량이 커서 분석이 지연되었습니다. 기본 모드로 전환됩니다.');
+                            this.showToast('분석 지연으로 기본 모드로 전환됩니다.');
                             if(this.gifInstance) this.gifInstance = null;
                             container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
                             if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -789,259 +680,162 @@
                         this.gifInstance.load(() => {
                             clearTimeout(fallbackTimer);
                             this.isGifLoading = false;
-                            
                             const length = this.gifInstance.get_length();
                             if(length === 0) {
-                                this.showToast('GIF 프레임을 분석할 수 없는 규격입니다.');
+                                this.showToast('분석 불가능한 규격입니다.');
                                 this.gifInstance = null;
                                 container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
                                 if (objectUrl) URL.revokeObjectURL(objectUrl);
                                 return;
                             }
-
-                            this.gifTotalFrames = length;
-                            this.gifCurrentFrame = 0;
-                            this.isPlaying = true;
+                            this.gifTotalFrames = length; this.gifCurrentFrame = 0; this.isPlaying = true;
                             this.gifInstance.play();
-                            
                             this.gifInterval = setInterval(() => {
-                                if(this.isPlaying && this.gifInstance) {
-                                    this.gifCurrentFrame = this.gifInstance.get_current_frame();
-                                }
+                                if(this.isPlaying && this.gifInstance) this.gifCurrentFrame = this.gifInstance.get_current_frame();
                             }, 50);
                         });
                     } catch (e) {
-                        clearTimeout(fallbackTimer);
-                        this.isGifLoading = false;
-                        console.error('SuperGif init error:', e);
+                        clearTimeout(fallbackTimer); this.isGifLoading = false;
                         container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
                         if (objectUrl) URL.revokeObjectURL(objectUrl);
                     }
                 },
                 closeGifModal() {
-                    this.modalOpen = false;
-                    this.modalItem = null;
+                    this.modalOpen = false; this.modalItem = null;
                     if(this.gifInterval) clearInterval(this.gifInterval);
-                    if(this.gifInstance) {
-                        this.gifInstance.pause();
-                        this.gifInstance = null;
-                    }
+                    if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
                     document.getElementById('modal_gif_container').innerHTML = ''; 
                     this.saveCloudData();
                 },
                 scrubGif() {
                     if (this.gifInstance && this.gifTotalFrames > 0) {
-                        this.isPlaying = false;
-                        this.gifInstance.pause();
+                        this.isPlaying = false; this.gifInstance.pause();
                         let targetFrame = parseInt(this.gifCurrentFrame);
                         if(isNaN(targetFrame) || targetFrame < 0) targetFrame = 0;
                         if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
-                        
-                        try {
-                            this.gifInstance.move_to(targetFrame);
-                        } catch(e) {}
+                        try { this.gifInstance.move_to(targetFrame); } catch(e) {}
                     }
                 },
                 togglePlay() {
                     if (this.gifInstance && this.gifTotalFrames > 0) {
-                        if(this.isPlaying) {
-                            this.gifInstance.pause();
-                            this.isPlaying = false;
-                        } else {
-                            this.gifInstance.play();
-                            this.isPlaying = true;
-                        }
+                        if(this.isPlaying) { this.gifInstance.pause(); this.isPlaying = false; } 
+                        else { this.gifInstance.play(); this.isPlaying = true; }
                     }
                 },
                 captureModalFrame() {
                     if (!this.modalItem) return;
-
                     let canvas;
                     if (this.gifInstance && this.gifTotalFrames > 0) {
-                        this.gifInstance.pause();
-                        this.isPlaying = false;
-                        canvas = this.gifInstance.get_canvas();
+                        this.gifInstance.pause(); this.isPlaying = false; canvas = this.gifInstance.get_canvas();
                     } else {
                         const imgElement = document.getElementById('modal_img_preview');
                         if(!imgElement) return;
                         canvas = document.createElement('canvas');
-                        canvas.width = imgElement.naturalWidth || imgElement.width;
-                        canvas.height = imgElement.naturalHeight || imgElement.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+                        canvas.width = imgElement.naturalWidth || imgElement.width; canvas.height = imgElement.naturalHeight || imgElement.height;
+                        const ctx = canvas.getContext('2d'); ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
                     }
-                    
                     const outCanvas = document.createElement('canvas');
                     let width = canvas.width; let height = canvas.height;
                     const MAX_W = 600; 
-                    if(width > MAX_W) {
-                        height = Math.round(height * (MAX_W / width)); width = MAX_W;
-                    }
+                    if(width > MAX_W) { height = Math.round(height * (MAX_W / width)); width = MAX_W; }
                     outCanvas.width = width; outCanvas.height = height;
-                    const ctx = outCanvas.getContext('2d');
-                    ctx.drawImage(canvas, 0, 0, width, height);
-                    
-                    if (!this.modalItem.originalGifUrl) {
-                        this.modalItem.originalGifUrl = this.modalItem.imgUrl;
-                    }
+                    const ctx = outCanvas.getContext('2d'); ctx.drawImage(canvas, 0, 0, width, height);
+                    if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
                     const dataUrl = outCanvas.toDataURL('image/webp', 0.85); 
-                    this.modalItem.imgUrl = dataUrl;
-                    this.modalItem.frozenDataUrl = dataUrl;
-                    this.modalItem.isFrozen = true;
+                    this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
                 },
                 resetModalFrame() {
                     if (!this.modalItem) return;
-                    if (this.modalItem.originalGifUrl) {
-                        this.modalItem.imgUrl = this.modalItem.originalGifUrl;
-                    }
-                    this.modalItem.isFrozen = false;
-                    this.modalItem.frozenDataUrl = null;
-                    
+                    if (this.modalItem.originalGifUrl) this.modalItem.imgUrl = this.modalItem.originalGifUrl;
+                    this.modalItem.isFrozen = false; this.modalItem.frozenDataUrl = null;
                     if(this.gifInterval) clearInterval(this.gifInterval);
                     this.$nextTick(() => { this.initSuperGif(); });
                 },
-
                 downloadCurrentModalFrame() {
                     if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
                     const cleanName = this.cleanName(this.modalItem.name);
                     this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${cleanName}_캡처.webp`);
                 },
-
                 cleanName(name) { return name ? name.replace(/^[\d_.\s]+/, '') : ''; },
-
                 copyViewerLink() {
                     const url = window.location.origin + window.location.pathname + '?viewer=true';
                     const iframeCode = `<iframe src="${url}" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; min-height: 800px; max-width: 100%;" allowfullscreen></iframe>`;
-                    
                     const textArea = document.createElement("textarea");
-                    textArea.value = iframeCode;
-                    textArea.style.position = "fixed";
-                    document.body.appendChild(textArea);
-                    textArea.focus();
-                    textArea.select();
-                    try {
-                        document.execCommand('copy');
-                        this.showToast('뷰어 전용 HTML 태그(iframe)가 복사되었습니다!');
-                    } catch (err) {
-                        this.showToast('태그 복사에 실패했습니다.');
-                    }
+                    textArea.value = iframeCode; textArea.style.position = "fixed";
+                    document.body.appendChild(textArea); textArea.focus(); textArea.select();
+                    try { document.execCommand('copy'); this.showToast('뷰어 전용 태그가 복사되었습니다!'); } catch (err) { this.showToast('태그 복사에 실패했습니다.'); }
                     document.body.removeChild(textArea);
                 },
 
                 async exportExcel() {
-                    if(this.items.length === 0) {
-                        this.showToast("출력할 목록이 없습니다."); return;
-                    }
+                    if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
                     const data = []; const merges = [];
-                    data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]);
-                    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
-
-                    data.push(["번호", "시그니처 이름", "구분", "링크", "비고 (개인)", "", "", "NEW 표기"]);
-                    merges.push({ s: { r: 1, c: 4 }, e: { r: 1, c: 5 } }); 
+                    data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]); merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
+                    data.push(["번호", "시그니처 이름", "구분", "링크", "비고 (개인)", "", "", "NEW 표기"]); merges.push({ s: { r: 1, c: 4 }, e: { r: 1, c: 5 } }); 
 
                     let currentRow = 2; 
                     this.items.forEach(item => {
                         let remarks = [];
-                        if (item.isPersonal) {
-                            const member = this.members.find(m => m.id === item.memberId);
-                            remarks.push(member ? `개인 (${member.name})` : "개인");
-                        }
+                        if (item.isPersonal) { const member = this.members.find(m => m.id === item.memberId); remarks.push(member ? `개인 (${member.name})` : "개인"); }
                         let newMark = item.isNew ? "NEW" : "";
                         const cleanItemName = `${item.id} ${this.cleanName(item.name)}`;
-
                         data.push([item.id, cleanItemName, "음원 외부링크", "", remarks.join(", "), "", "", newMark]);
                         data.push(["", "", "이미지 외부링크", "", "", "", "", ""]);
                         data.push(["", "", "", "", "", "", "", ""]);
-
-                        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } });
-                        merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } });
-                        merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } });
-                        merges.push({ s: { r: currentRow, c: 7 }, e: { r: currentRow + 1, c: 7 } });
+                        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } }); merges.push({ s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } }); merges.push({ s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } }); merges.push({ s: { r: currentRow, c: 7 }, e: { r: currentRow + 1, c: 7 } });
                         currentRow += 3;
                     });
-
                     const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(data);
-                    ws['!merges'] = merges;
-                    ws['!cols'] = [{ wch: 8 },  { wch: 40 }, { wch: 15 }, { wch: 60 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 15 }];
-
+                    ws['!merges'] = merges; ws['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 15 }, { wch: 60 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 15 }];
                     for (let cellAddress in ws) {
                         if (cellAddress[0] === '!') continue;
-                        const col = cellAddress.replace(/[0-9]/g, '');
-                        const row = parseInt(cellAddress.replace(/\D/g, '')) - 1; 
-                        if (!ws[cellAddress].s) ws[cellAddress].s = {};
-                        ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11 };
-                        
-                        if (col === 'A' || col === 'B') ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
-                        if (col === 'C') ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
-                        
+                        const col = cellAddress.replace(/[0-9]/g, ''); const row = parseInt(cellAddress.replace(/\D/g, '')) - 1; 
+                        if (!ws[cellAddress].s) ws[cellAddress].s = {}; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11 };
+                        if (col === 'A' || col === 'B' || col === 'C') ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
                         if (row === 0) { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 14, bold: true }; }
                         if (col === 'H') { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, color: { rgb: "FF0000" }, bold: true }; }
                     }
-
                     XLSX.utils.book_append_sheet(wb, ws, "시그니처 목록");
                     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
                     const blob = new Blob([wbout], { type: 'application/octet-stream' });
                     const filename = `시그니처목록_업로드양식_${this.lastModified}.xlsx`;
-                    
                     try {
                         if (window.showSaveFilePicker) {
-                            const handle = await window.showSaveFilePicker({
-                                suggestedName: filename,
-                                types: [{ description: 'Excel File', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }],
-                            });
-                            const writable = await handle.createWritable();
-                            await writable.write(blob); await writable.close();
+                            const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'Excel File', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+                            const writable = await handle.createWritable(); await writable.write(blob); await writable.close();
                             this.showToast("엑셀 파일이 성공적으로 저장되었습니다.");
-                        } else {
-                            XLSX.writeFile(wb, filename); 
-                        }
+                        } else { XLSX.writeFile(wb, filename); }
                     } catch (e) { if (e.name !== 'AbortError') XLSX.writeFile(wb, filename); }
                 },
 
                 async downloadImage() {
                     if (this.items.length === 0) { this.showToast("다운로드할 내용이 없습니다."); return; }
                     this.isDownloading = true;
-
                     let dirHandle = null;
                     if (window.showDirectoryPicker) {
-                        try { dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-                        } catch (e) { if (e.name !== 'AbortError') console.error(e); this.isDownloading = false; return; }
+                        try { dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (e) { if (e.name !== 'AbortError') console.error(e); this.isDownloading = false; return; }
                     }
-
                     const board = this.$refs.captureBoard;
                     try {
-                        const scale = 2.5; 
-                        const bgColor = this.isDarkMode ? '#111827' : '#f9fafb';
+                        const scale = 2.5; const bgColor = this.isDarkMode ? '#111827' : '#f9fafb';
                         const canvas = await html2canvas(board, { scale: scale, useCORS: true, backgroundColor: bgColor });
-                        
                         const items = board.querySelectorAll('.avoid-break');
                         const ranges = Array.from(items).map(el => {
-                            const rect = el.getBoundingClientRect();
-                            const boardRect = board.getBoundingClientRect();
+                            const rect = el.getBoundingClientRect(); const boardRect = board.getBoundingClientRect();
                             return { top: (rect.top - boardRect.top) * scale, bottom: (rect.bottom - boardRect.top) * scale };
                         });
-
                         const MAX_HEIGHT = 10000; 
-
                         const saveCanvasPart = async (partCanvas, filename) => {
                             return new Promise(resolve => {
                                 partCanvas.toBlob(async (blob) => {
                                     if (dirHandle) {
-                                        try {
-                                            const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
-                                            const writable = await fileHandle.createWritable();
-                                            await writable.write(blob); await writable.close();
-                                        } catch (e) {
-                                            const url = URL.createObjectURL(blob); this.triggerDownload(url, filename);
-                                        }
-                                    } else {
-                                        const url = URL.createObjectURL(blob); this.triggerDownload(url, filename);
-                                    }
+                                        try { const fileHandle = await dirHandle.getFileHandle(filename, { create: true }); const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close();
+                                        } catch (e) { const url = URL.createObjectURL(blob); this.triggerDownload(url, filename); }
+                                    } else { const url = URL.createObjectURL(blob); this.triggerDownload(url, filename); }
                                     resolve();
                                 }, 'image/webp', 0.85); 
                             });
                         };
-
                         if (canvas.height <= MAX_HEIGHT) {
                             await saveCanvasPart(canvas, `시그니처보드_${this.lastModified}.webp`);
                             this.showToast(dirHandle ? "지정한 폴더에 WebP 이미지로 저장되었습니다." : "WebP 이미지가 다운로드 되었습니다.");
@@ -1051,25 +845,16 @@
                                 let nextY = currentY + MAX_HEIGHT;
                                 if (nextY < canvas.height) {
                                     let intersectingItem = ranges.find(r => nextY > r.top && nextY < r.bottom);
-                                    if (intersectingItem) {
-                                        nextY = intersectingItem.top - (15 * scale);
-                                        if (nextY <= currentY) nextY = intersectingItem.bottom + (15 * scale);
-                                    }
+                                    if (intersectingItem) { nextY = intersectingItem.top - (15 * scale); if (nextY <= currentY) nextY = intersectingItem.bottom + (15 * scale); }
                                 } else { nextY = canvas.height; }
-
-                                const partHeight = nextY - currentY;
-                                const partCanvas = document.createElement('canvas');
-                                partCanvas.width = canvas.width; partCanvas.height = partHeight;
-                                const ctx = partCanvas.getContext('2d');
-                                ctx.drawImage(canvas, 0, currentY, canvas.width, partHeight, 0, 0, canvas.width, partHeight);
+                                const partHeight = nextY - currentY; const partCanvas = document.createElement('canvas'); partCanvas.width = canvas.width; partCanvas.height = partHeight;
+                                const ctx = partCanvas.getContext('2d'); ctx.drawImage(canvas, 0, currentY, canvas.width, partHeight, 0, 0, canvas.width, partHeight);
                                 await saveCanvasPart(partCanvas, `시그니처보드_${this.lastModified}_part${partNum}.webp`);
                                 currentY = nextY; partNum++;
                             }
                             this.showToast(`이미지가 너무 길어 ${partNum - 1}장으로 분할 저장되었습니다.`);
                         }
-                    } catch(e) {
-                        console.error("캡처 오류:", e); this.showToast('이미지 생성 중 오류가 발생했습니다.');
-                    } finally { this.isDownloading = false; }
+                    } catch(e) { console.error("캡처 오류:", e); this.showToast('이미지 생성 중 오류가 발생했습니다.'); } finally { this.isDownloading = false; }
                 },
 
                 triggerDownload(dataUrl, filename) {
@@ -1085,14 +870,7 @@
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'] },
-                    colors: { board: '#111827', panel: '#1f2937' }
-                }
-            }
-        }
+        tailwind.config = { theme: { extend: { fontFamily: { sans: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'] }, colors: { board: '#111827', panel: '#1f2937' } } } }
     </script>
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -1114,10 +892,8 @@
     <header class="bg-white shadow-sm h-auto sm:h-20 py-2 sm:py-0 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b flex-wrap gap-2">
         <div class="flex items-center gap-3 sm:gap-4">
             <div class="flex items-center gap-2">
-                <img src="logo.png" alt="771 Logo" class="h-12 sm:h-16 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                <i class="ph-fill ph-magic-wand text-blue-600 text-4xl sm:text-5xl" style="display: none;"></i>
-                
-                <h1 class="font-black text-lg sm:text-xl ml-1">771 시그니처 뷰어</h1>
+                <i class="ph-fill ph-magic-wand text-blue-600 text-4xl sm:text-5xl"></i>
+                <h1 class="font-black text-lg sm:text-xl ml-1">771 시그니처 매니저</h1>
                 <span class="text-[10px] sm:text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-1 hidden sm:inline-block border border-green-200" x-show="isSyncing">클라우드 동기화 됨</span>
                 
                 <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-1 sm:ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-sm" title="HTML이나 게시글에 공유할 링크 발급">
@@ -1130,7 +906,6 @@
             </button>
         </div>
         <div class="flex items-center gap-2 sm:gap-3">
-            
             <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 mr-1 sm:mr-2 shadow-sm border border-gray-200" title="화면 확대/축소">
                 <button @click="zoomOut()" class="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
                     <i class="ph ph-minus font-bold text-base sm:text-lg"></i>
@@ -1140,24 +915,19 @@
                     <i class="ph ph-plus font-bold text-base sm:text-lg"></i>
                 </button>
             </div>
-
             <div x-show="isViewerMode" class="relative mr-2 sm:mr-4 hidden sm:block">
                 <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                 <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="border border-gray-300 rounded-full pl-10 pr-4 py-1.5 sm:py-2 text-sm focus:outline-blue-500 w-40 sm:w-56 bg-gray-50 transition-all focus:w-72 shadow-sm">
             </div>
-
-            <button x-show="!isViewerMode" @click="exportExcel()"
-                    class="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm hidden sm:flex">
+            <button x-show="!isViewerMode" @click="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm hidden sm:flex">
                 <i class="ph ph-file-xls"></i> 엑셀 업로드 양식
             </button>
-            <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm disabled:opacity-50">
+            <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading" class="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm disabled:opacity-50">
                 <i class="ph ph-download-simple" x-show="!isDownloading"></i>
                 <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
                 <span x-text="isDownloading ? '고화질 캡처 중...' : '이미지 캡처'"></span>
             </button>
         </div>
-        
         <div x-show="isViewerMode" class="relative w-full mt-2 sm:hidden block">
             <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
             <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="w-full border border-gray-300 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-blue-500 bg-gray-50 transition-all shadow-sm">
@@ -1166,7 +936,8 @@
 
     <main class="flex flex-1 relative" :class="isViewerMode ? 'flex-col' : 'overflow-hidden min-h-0'">
         
-        <aside x-show="!isViewerMode" class="w-[500px] bg-white border-r border-gray-200 flex flex-col shrink-0 min-h-0">
+        <!-- 🚨 단 1개만 존재하는 좌측 관리자 패널 (DOM 최적화 완료) -->
+        <aside x-show="!isViewerMode" class="w-[500px] bg-white border-r border-gray-200 flex flex-col shrink-0 min-h-0 z-20">
             <div class="flex border-b text-sm font-bold bg-gray-50 select-none shrink-0">
                 <button @click="activeTab = 'basic'" class="flex-1 py-3 transition-colors" :class="activeTab === 'basic' ? 'border-b-2 border-blue-600 text-blue-600 bg-white' : 'text-gray-500 hover:text-gray-800'">
                     1. 기본 설정 및 연결
@@ -1177,7 +948,6 @@
             </div>
 
             <div class="flex-1 overflow-y-auto p-5 min-h-0" x-ref="leftPanel">
-                
                 <div x-show="activeTab === 'basic'" class="space-y-6">
                     <section class="bg-blue-50 p-4 rounded-xl border border-blue-100">
                         <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-blue-900 select-none">
@@ -1191,49 +961,12 @@
                             </div>
                         </label>
                     </section>
-
-                    <section class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 select-none hidden">
-                        <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-indigo-900">
-                            <i class="ph ph-globe"></i> [방법2] 웹 서버 링크로 일괄 연결
-                        </h2>
-                        <p class="text-xs text-indigo-700 mb-3 leading-relaxed">
-                            웹(GitHub 등)에 올린 <code>assets</code> 폴더 주소를 입력하시면, 1번부터 끝 번호까지 인터넷 주소로 자동 매핑해줍니다! <b>뷰어들이 원본을 보게 하려면 이 기능을 꼭 사용하세요.</b>
-                        </p>
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold text-indigo-800 w-24">웹 폴더 주소:</span>
-                                <input type="text" x-model="webAssetBaseUrl" placeholder="예: ./assets/ 또는 https://..." class="flex-1 border rounded px-3 py-1.5 text-sm focus:outline-indigo-500">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold text-indigo-800 w-24">이미지 형식:</span>
-                                <select x-model="webAssetImgExt" class="flex-1 border rounded px-3 py-1.5 text-sm">
-                                    <option value=".gif">.gif (움직이는 이미지)</option>
-                                    <option value=".png">.png</option>
-                                    <option value=".webp">.webp</option>
-                                    <option value=".jpg">.jpg</option>
-                                    <option value="">(연결 안 함)</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold text-indigo-800 w-24">음원 형식:</span>
-                                <select x-model="webAssetAudioExt" class="flex-1 border rounded px-3 py-1.5 text-sm">
-                                    <option value=".mp3">.mp3</option>
-                                    <option value=".wav">.wav</option>
-                                    <option value="">(연결 안 함)</option>
-                                </select>
-                            </div>
-                            <button @click="autoLinkWebAssets()" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                                <i class="ph-fill ph-link"></i> 서버 주소로 전체 시그니처 자동 매핑
-                            </button>
-                        </div>
-                    </section>
-
                     <section class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 select-none">
                         <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-emerald-900">
-                            <i class="ph ph-file-xls"></i> [방법3] 엑셀 외부링크 일괄 등록
+                            <i class="ph ph-file-xls"></i> [방법2] 엑셀 외부링크 일괄 등록
                         </h2>
                         <p class="text-xs text-emerald-700 mb-3 leading-relaxed">
-                            다운로드한 <b>엑셀 파일의 D열(링크)</b>에 호스팅해 둔 이미지나 음원의 URL을 적어 넣고 업로드하시면, 시그니처 보드에 외부링크가 1초만에 일괄 등록됩니다. 서버 부하를 획기적으로 줄일 수 있습니다.
+                            다운로드한 <b>엑셀 파일의 D열(링크)</b>에 호스팅해 둔 이미지나 음원의 URL을 적어 넣고 업로드하시면, 시그니처 보드에 외부링크가 1초만에 일괄 등록됩니다.
                         </p>
                         <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm">
                             <input type="file" accept=".xlsx, .xls, .csv" @change="importExcelLinks" class="hidden">
@@ -1243,7 +976,6 @@
                             </div>
                         </label>
                     </section>
-
                     <section class="select-none">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2">특별 일정 / 이벤트 하이라이트</h2>
                         <div class="flex flex-col gap-2 mb-3 bg-gray-50 p-3 rounded border">
@@ -1263,14 +995,12 @@
                             </template>
                         </div>
                     </section>
-                    
                     <section class="select-none">
-                        <h2 class="font-bold text-lg mb-3 border-b pb-2">개인 시그니처 멤버 관리 (드래그 정렬)</h2>
+                        <h2 class="font-bold text-lg mb-3 border-b pb-2">개인 시그니처 멤버 관리</h2>
                         <div class="flex gap-2 mb-3">
                             <input type="text" x-model="newMemberName" placeholder="새 멤버 이름" class="flex-1 border rounded px-3 py-2 text-sm focus:outline-blue-500">
                             <button @click="addMember()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700">추가</button>
                         </div>
-                        
                         <div class="space-y-2" x-init="new Sortable($el, { animation: 150, handle: '.drag-handle', onEnd: e => reorderMembers(e.oldIndex, e.newIndex) })">
                             <template x-for="member in members" :key="member.id">
                                 <div class="flex justify-between items-center bg-white border px-3 py-2 rounded shadow-sm group">
@@ -1283,9 +1013,8 @@
                             </template>
                         </div>
                     </section>
-
                     <section class="select-none">
-                        <h2 class="font-bold text-lg mb-3 border-b pb-2">자동 분류 그룹 관리 (드래그 정렬)</h2>
+                        <h2 class="font-bold text-lg mb-3 border-b pb-2">자동 분류 그룹 관리</h2>
                         <div class="flex flex-col gap-2 mb-3 bg-gray-50 p-3 rounded border">
                             <div class="flex gap-2 items-center">
                                 <input type="color" x-model="newGroupColor" class="w-10 h-9 p-0 border-0 rounded cursor-pointer shrink-0" title="그룹 테마 색상">
@@ -1298,12 +1027,10 @@
                             </div>
                             <button @click="addGroup()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 mt-1">그룹 생성 (자동 이동)</button>
                         </div>
-                        
                         <div class="space-y-2" x-init="new Sortable($el, { animation: 150, handle: '.drag-handle', onEnd: e => reorderGroups(e.oldIndex, e.newIndex) })">
                             <template x-for="group in groups" :key="group.id">
                                 <div class="bg-white border px-3 py-2 rounded shadow-sm group relative overflow-hidden">
                                     <div class="absolute left-0 top-0 w-1.5 h-full" :style="`background-color: ${group.color || '#6B7280'};`"></div>
-                                    
                                     <template x-if="editingGroupId !== group.id">
                                         <div class="flex justify-between items-center w-full pl-2">
                                             <div class="flex items-center gap-3">
@@ -1319,7 +1046,6 @@
                                             </div>
                                         </div>
                                     </template>
-                                    
                                     <template x-if="editingGroupId === group.id">
                                         <div class="flex flex-col w-full gap-2 mt-1 mb-1 pl-2">
                                             <div class="flex gap-2 items-center">
@@ -1341,7 +1067,6 @@
                             </template>
                         </div>
                     </section>
-
                     <section class="select-none pt-4 border-t border-gray-200">
                         <h2 class="font-bold text-lg mb-3 pb-2 text-gray-800">
                             <i class="ph-fill ph-floppy-disk mr-1 text-blue-600"></i> 설정 수동 백업 및 복구
@@ -1357,7 +1082,7 @@
                         </div>
                         <div class="flex gap-3 mt-3">
                             <button @click="exportFrozenImagesZip()" class="flex-1 bg-purple-600 text-white px-3 py-3 rounded-lg text-sm hover:bg-purple-700 font-bold flex flex-col items-center justify-center gap-1 shadow transition">
-                                <i class="ph ph-file-zip text-xl"></i> 캡처(고정)된 이미지 파일 ZIP 압축 백업
+                                <i class="ph ph-file-zip text-xl"></i> 캡처(고정) 썸네일 ZIP 백업
                             </button>
                         </div>
                     </section>
@@ -1366,93 +1091,59 @@
                 <div x-show="activeTab === 'detail'" class="space-y-3 pb-10 select-none">
                     <div class="flex justify-between items-end border-b pb-2 mb-2">
                         <h2 class="font-bold text-lg text-gray-800">개별 항목 상세 제어</h2>
-                        <span class="text-sm font-bold text-blue-600" x-text="`검색된 항목: ${filteredItems.length}개`"></span>
+                        <span class="text-sm font-bold text-blue-600" x-text="`항목: ${filteredItems.length}개`"></span>
                     </div>
-
                     <div class="mb-2 flex gap-2">
-                        <select x-model="detailFilter" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 focus:border-blue-500 bg-white text-gray-800 shadow-sm font-bold">
+                        <select x-model="detailFilter" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 bg-white text-gray-800 font-bold">
                             <option value="all">📁 모든 시그니처 보기</option>
                             <optgroup label="분류 그룹">
-                                <template x-for="g in groups" :key="g.id">
-                                    <option :value="'g_' + g.id" x-text="'📁 ' + g.name"></option>
-                                </template>
+                                <template x-for="g in groups" :key="g.id"><option :value="'g_' + g.id" x-text="'📁 ' + g.name"></option></template>
                             </optgroup>
                             <optgroup label="개인 시그니처">
-                                <template x-for="m in members" :key="m.id">
-                                    <option :value="'m_' + m.id" x-text="'👑 ' + m.name + ' 개인시그'"></option>
-                                </template>
+                                <template x-for="m in members" :key="m.id"><option :value="'m_' + m.id" x-text="'👑 ' + m.name + ' 개인시그'"></option></template>
                                 <option value="m_unassigned">👑 미지정 개인시그</option>
                             </optgroup>
                         </select>
-                        <button @click="detailFilter = 'new'" class="bg-yellow-400 hover:bg-yellow-500 text-black px-3 py-2 rounded-lg text-sm font-bold shadow-sm transition" :class="detailFilter === 'new' ? 'ring-2 ring-offset-1 ring-yellow-500' : ''">
-                            ✨ NEW
-                        </button>
+                        <button @click="detailFilter = 'new'" class="bg-yellow-400 hover:bg-yellow-500 text-black px-3 py-2 rounded-lg text-sm font-bold shadow-sm transition">✨ NEW</button>
                     </div>
-
                     <div class="relative mb-4">
                         <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
-                        <input type="text" x-model="searchQuery" placeholder="시그니처 번호/이름 검색..." class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-blue-500 focus:border-blue-500 bg-gray-50 text-gray-800 shadow-sm transition-all">
+                        <input type="text" x-model="searchQuery" placeholder="번호 또는 이름 검색..." class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-blue-500 bg-gray-50 text-gray-800">
                     </div>
-
                     <template x-if="filteredItems.length === 0">
-                        <div class="text-center py-10 text-gray-400 text-sm" x-text="items.length === 0 ? '업로드된 파일이 없습니다.' : '검색 결과가 없습니다.'"></div>
+                        <div class="text-center py-10 text-gray-400 text-sm">항목이 없습니다.</div>
                     </template>
-
                     <template x-for="item in filteredItems" :key="item.id">
-                        <div class="border rounded-lg p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all" :class="item.isNew ? 'border-yellow-400 bg-yellow-50' : ''">
-                            
+                        <div class="border rounded-lg p-4 bg-white shadow-sm flex flex-col gap-3 relative" :class="item.isNew ? 'border-yellow-400 bg-yellow-50' : ''">
                             <div class="flex justify-between items-center">
                                 <span class="text-sm font-black text-gray-800" x-text="`${item.id} ${cleanName(item.name)}`"></span>
                                 <div class="flex gap-4 text-xs font-bold">
-                                    <label class="flex items-center gap-1.5 cursor-pointer">
-                                        <input type="checkbox" x-model="item.isPersonal" class="accent-blue-600 w-4 h-4" @change="saveCloudData()">
-                                        <span :class="item.isPersonal ? 'text-blue-600' : 'text-gray-400'">개인시그</span>
-                                    </label>
-                                    <label class="flex items-center gap-1.5 cursor-pointer">
-                                        <input type="checkbox" x-model="item.isNew" class="accent-yellow-500 w-4 h-4" @change="saveCloudData()">
-                                        <span :class="item.isNew ? 'text-yellow-600' : 'text-gray-400'">NEW</span>
-                                    </label>
+                                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="item.isPersonal" class="accent-blue-600 w-4 h-4" @change="saveCloudData()"><span :class="item.isPersonal ? 'text-blue-600' : 'text-gray-400'">개인시그</span></label>
+                                    <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" x-model="item.isNew" class="accent-yellow-500 w-4 h-4" @change="saveCloudData()"><span :class="item.isNew ? 'text-yellow-600' : 'text-gray-400'">NEW</span></label>
                                 </div>
                             </div>
-                            
                             <div class="flex gap-3 items-center">
                                 <div class="relative group w-16 h-9 shrink-0 cursor-pointer" @click="if(item.isGif) openGifModal(item)">
-                                    <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full rounded object-cover border border-gray-300" alt="">
-                                    <div x-show="item.isGif" class="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition text-[10px] rounded font-bold leading-tight">
-                                        <span>🔍<br>설정</span>
-                                    </div>
-                                    <div x-show="item.isFrozen" class="absolute -top-1 -right-1 bg-blue-500 text-white w-4 h-4 rounded-full flex items-center justify-center border border-white shadow-sm">
-                                        <i class="ph-fill ph-check text-[10px]"></i>
-                                    </div>
+                                    <img :src="item.imgUrl" class="w-full h-full rounded object-cover border border-gray-300" @error="handleImageError($el, item)">
+                                    <div x-show="item.isGif" class="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition text-[10px] rounded font-bold"><span>🔍<br>설정</span></div>
+                                    <div x-show="item.isFrozen" class="absolute -top-1 -right-1 bg-blue-500 text-white w-4 h-4 rounded-full flex items-center justify-center border border-white"><i class="ph-fill ph-check text-[10px]"></i></div>
                                 </div>
                                 <div class="flex flex-col flex-1 gap-2">
                                     <template x-if="!item.isPersonal">
-                                        <select x-model="item.groupId" @change="saveCloudData()" class="border border-gray-300 rounded py-1.5 px-2 text-sm bg-gray-50 focus:outline-blue-500 w-full text-gray-700">
-                                            <template x-for="g in groups" :key="g.id">
-                                                <option :value="g.id" x-text="g.name" :selected="item.groupId === g.id"></option>
-                                            </template>
+                                        <select x-model="item.groupId" @change="saveCloudData()" class="border border-gray-300 rounded py-1.5 px-2 text-sm bg-gray-50 text-gray-700">
+                                            <template x-for="g in groups" :key="g.id"><option :value="g.id" x-text="g.name" :selected="item.groupId === g.id"></option></template>
                                         </select>
                                     </template>
                                     <template x-if="item.isPersonal">
-                                        <select x-model="item.memberId" @change="saveCloudData()" class="border-2 border-blue-400 rounded py-1.5 px-2 text-sm bg-blue-50 focus:outline-blue-500 w-full text-blue-900 font-bold">
+                                        <select x-model="item.memberId" @change="saveCloudData()" class="border-2 border-blue-400 rounded py-1.5 px-2 text-sm bg-blue-50 text-blue-900 font-bold">
                                             <option value="">-- 멤버 지정 (미지정) --</option>
-                                            <template x-for="m in members" :key="m.id">
-                                                <option :value="m.id" x-text="m.name" :selected="item.memberId === m.id"></option>
-                                            </template>
+                                            <template x-for="m in members" :key="m.id"><option :value="m.id" x-text="m.name" :selected="item.memberId === m.id"></option></template>
                                         </select>
                                     </template>
-
                                     <div class="flex flex-col gap-1 mt-1">
-                                        <div class="flex items-center gap-2">
-                                            <i class="ph-fill ph-image text-gray-400"></i>
-                                            <input type="text" x-model="item.mediaUrl" @change="if(item.mediaUrl) { item.mediaUrl = item.mediaUrl.replace(/^http:\/\//i, 'https://'); item.imgUrl = item.mediaUrl; item.hasImage = true; item.isGif = item.mediaUrl.toLowerCase().includes('.gif'); } saveCloudData();" placeholder="이미지/GIF 외부 링크 (옵션)" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50">
-                                        </div>
-                                        <div class="flex items-center gap-2">
-                                            <i class="ph-fill ph-music-note text-gray-400"></i>
-                                            <input type="text" x-model="item.audioUrl" @change="if(item.audioUrl) { item.audioUrl = item.audioUrl.replace(/^http:\/\//i, 'https://'); item.hasAudio = true; } saveCloudData();" placeholder="음원 외부 링크 (옵션)" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50">
-                                        </div>
+                                        <div class="flex items-center gap-2"><i class="ph-fill ph-image text-gray-400"></i><input type="text" x-model="item.mediaUrl" @change="if(item.mediaUrl) { item.mediaUrl = item.mediaUrl.replace(/^http:\/\//i, 'https://'); item.imgUrl = item.mediaUrl; item.hasImage = true; item.isGif = item.mediaUrl.toLowerCase().includes('.gif'); } saveCloudData();" placeholder="이미지/GIF 외부 링크" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50"></div>
+                                        <div class="flex items-center gap-2"><i class="ph-fill ph-music-note text-gray-400"></i><input type="text" x-model="item.audioUrl" @change="if(item.audioUrl) { item.audioUrl = item.audioUrl.replace(/^http:\/\//i, 'https://'); item.hasAudio = true; } saveCloudData();" placeholder="음원 외부 링크" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50"></div>
                                     </div>
-
                                 </div>
                             </div>
                         </div>
@@ -1461,7 +1152,7 @@
             </div>
         </aside>
 
-        <div class="flex-1 select-none transition-colors duration-300" :class="[isDarkMode ? 'bg-gray-400' : 'bg-gray-200', isViewerMode ? 'w-full p-4 md:p-8' : 'overflow-y-auto p-8 min-h-0']" x-ref="rightPanel">
+        <div class="flex-1 select-none transition-colors duration-300 z-10 relative" :class="[isDarkMode ? 'bg-gray-400' : 'bg-gray-200', isViewerMode ? 'w-full p-4 md:p-8' : 'overflow-y-auto p-8 min-h-0']" x-ref="rightPanel">
             
             <div id="capture-board" x-ref="captureBoard" class="mx-auto rounded-xl p-6 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative transition-colors duration-300" :class="[isDarkMode ? 'bg-board text-white' : 'bg-gray-50 text-gray-900', isViewerMode ? 'w-full max-w-7xl' : 'w-[1150px]']">
                 
@@ -1475,41 +1166,39 @@
                     </div>
                 </div>
 
-                <template x-if="newItems.length > 0">
-                    <div class="mb-10 relative avoid-break z-10">
-                        <div class="absolute -inset-1 bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 rounded-2xl blur-md opacity-40 animate-pulse"></div>
-                        <div class="relative rounded-xl p-6 border-2 transition-colors duration-300 shadow-xl" :class="isDarkMode ? 'bg-gray-800/95 border-yellow-500/70' : 'bg-yellow-50 border-yellow-400'">
-                            
-                            <div class="flex items-center gap-3 mb-5 border-b pb-3 transition-colors duration-300" :class="isDarkMode ? 'border-yellow-500/30' : 'border-yellow-400/50'">
-                                <i class="ph-fill ph-sparkle text-yellow-500 text-3xl"></i>
-                                <h2 class="text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-yellow-400' : 'text-yellow-700'">
-                                    NEW 시그니처
-                                    <span class="text-lg font-bold ml-1" :class="isDarkMode ? 'text-yellow-500/70' : 'text-yellow-600/70'" x-text="`(${newItems.length}개)`"></span>
-                                </h2>
-                            </div>
+                <!-- 🚨 ✨NEW 전용 네온 하이라이트 복구 완료 -->
+                <template x-if="getNewItems().length > 0">
+                    <div class="mb-12 relative p-8 rounded-3xl border-2 bg-gray-900 overflow-hidden shadow-[0_0_40px_rgba(250,204,21,0.6)] avoid-break group/new z-10" :class="isDarkMode ? 'border-yellow-500/80' : 'border-yellow-400'">
+                        <div class="absolute -inset-1 bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 rounded-3xl blur-xl opacity-40 animate-pulse pointer-events-none"></div>
+                        
+                        <div class="relative z-10 flex items-center gap-3 mb-6 border-b-2 pb-3 border-yellow-500/30">
+                            <i class="ph-fill ph-sparkle text-yellow-400 text-4xl animate-pulse"></i>
+                            <h2 class="text-3xl font-black text-yellow-300 drop-shadow-[0_0_10px_rgba(250,204,21,0.8)] tracking-tight">
+                                ✨ NEW 시그니처 하이라이트
+                                <span class="text-xl font-bold ml-2 text-yellow-500/80" x-text="`(${getNewItems().length}개)`"></span>
+                            </h2>
+                        </div>
 
-                            <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
-                                <template x-for="item in newItems" :key="item.id">
-                                    <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
-                                        <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]">
-                                            <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
-                                            <div class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
-                                            
-                                            <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                                <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
-                                            </div>
-                                        </div>
-                                        <div class="flex flex-col items-center w-full leading-tight px-1">
-                                            <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-yellow-400' : 'text-yellow-600']">
-                                                <span x-text="item.id"></span>
-                                                <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
-                                            </span>
-                                            <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, isDarkMode ? 'text-yellow-300' : 'text-yellow-700']" x-text="cleanName(item.name)"></span>
-                                            <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                        <div class="grid gap-4 sm:gap-6 relative z-10" :class="zoomGridClass">
+                            <template x-for="item in getNewItems()" :key="'new_'+item.id">
+                                <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
+                                    <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.6)]">
+                                        <!-- 이미지 속도를 위해 loading=lazy 속성 삭제 -->
+                                        <img :src="item.imgUrl" class="w-full h-full object-cover bg-gray-800" @error="handleImageError($el, item)">
+                                        <div class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10 shadow-sm">NEW</div>
+                                        <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
+                                            <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm shadow-lg border border-white/20">🔍 설정</span>
                                         </div>
                                     </div>
-                                </template>
-                            </div>
+                                    <div class="flex flex-col items-center w-full leading-tight px-1">
+                                        <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, 'text-yellow-400']">
+                                            <span x-text="item.id"></span>
+                                            <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="hover:text-yellow-200 transition drop-shadow-md" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
+                                        </span>
+                                        <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, 'text-yellow-300 drop-shadow-md']" x-text="cleanName(item.name)"></span>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                     </div>
                 </template>
@@ -1528,11 +1217,10 @@
                                             <div class="flex flex-col items-center gap-3 w-full avoid-break">
                                                 <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" 
                                                      :class="item.isNew ? 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
-                                                    <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                                    <img :src="item.imgUrl" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'" @error="handleImageError($el, item)">
                                                     <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
-                                                    
                                                     <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                                        <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
+                                                        <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                                     </div>
                                                 </div>
                                                 <div class="flex flex-col items-center w-full leading-tight px-1">
@@ -1541,7 +1229,6 @@
                                                         <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                     </span>
                                                     <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')]" x-text="cleanName(item.name)"></span>
-                                                    <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                                 </div>
                                             </div>
                                         </template>
@@ -1569,7 +1256,7 @@
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
                                         <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group hover:border-gray-400" 
                                              :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-600' : 'border-gray-300')">
-                                            <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                            <img :src="item.imgUrl" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'" @error="handleImageError($el, item)">
                                             <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                             
                                             <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
@@ -1584,7 +1271,6 @@
                                             <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" 
                                                   :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')]" 
                                                   x-text="cleanName(item.name)"></span>
-                                            <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                         </div>
                                     </div>
                                 </template>
@@ -1611,7 +1297,7 @@
                                     <template x-for="item in getPersonalItemsByMember(member.id)" :key="item.id">
                                         <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
                                             <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-blue-400/50' : 'border-blue-400')">
-                                                <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover">
+                                                <img :src="item.imgUrl" class="w-full h-full object-cover" @error="handleImageError($el, item)">
                                                 <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                                 
                                                 <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
@@ -1624,7 +1310,6 @@
                                                     <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                 </span>
                                                 <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')]" x-text="cleanName(item.name)"></span>
-                                                <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                             </div>
                                         </div>
                                     </template>
@@ -1651,7 +1336,7 @@
                             <template x-for="item in getUnassignedPersonalItems()" :key="item.id">
                                 <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
                                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
-                                        <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover">
+                                        <img :src="item.imgUrl" class="w-full h-full object-cover" @error="handleImageError($el, item)">
                                         <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                         
                                         <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
@@ -1664,7 +1349,6 @@
                                             <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                         </span>
                                         <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')]" x-text="cleanName(item.name)"></span>
-                                        <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                     </div>
                                 </div>
                             </template>
@@ -1681,7 +1365,6 @@
 
     <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity" style="display: none;" @click="if($event.target === $el) closeGifModal()">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-[800px] max-w-[90vw] flex flex-col gap-6" @click.stop>
-            
             <div class="flex justify-between items-center border-b pb-4 dark:border-gray-700">
                 <h2 class="text-2xl font-black text-gray-800 dark:text-white" x-text="modalItem ? `[ No.${modalItem.id} ] 썸네일 프레임 설정 스튜디오` : ''"></h2>
                 <button @click="closeGifModal()" class="text-gray-500 hover:text-red-500 transition">
@@ -1718,9 +1401,8 @@
                         <button x-show="modalItem && modalItem.isFrozen" @click="downloadCurrentModalFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             <i class="ph-fill ph-download-simple"></i> 다운로드
                         </button>
-                        
                         <button x-show="modalItem && modalItem.isFrozen" @click="resetModalFrame()" class="bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
-                            <i class="ph-fill ph-play"></i> 고정 풀기
+                            <i class="ph-fill ph-play"></i> 고정 풀기 (원본 재생)
                         </button>
                         <button x-show="modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             <i class="ph-fill ph-camera"></i> 현재 프레임 캡처
@@ -1734,6 +1416,7 @@
         </div>
     </div>
 
+    <!-- 토스트 알림창 -->
     <div x-show="toastMessage" 
          x-transition:enter="transition ease-out duration-300"
          x-transition:enter-start="opacity-0 transform translate-y-10"
