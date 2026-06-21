@@ -3,31 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그니처 보드 생성기</title>
+    <title>771 시그니처 뷰어</title>
     
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS (외부 CDN 연동) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- xlsx-js-style -->
+    <!-- 외부 라이브러리 연동 (JS) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-    
-    <!-- SortableJS -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
-
-    <!-- Libgif.js -->
     <script src="https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js"></script>
-
-    <!-- JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <!-- Firebase Cloud Storage -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        window.firebaseDeps = { initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot };
+    <!-- Tailwind 커스텀 설정 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'] },
+                    colors: { board: '#111827', panel: '#1f2937' }
+                }
+            }
+        }
     </script>
 
+    <!-- CSS 스타일 영역 -->
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        [x-cloak] { display: none !important; }
+        .sortable-ghost { opacity: 0.4; background-color: #f9fafb; }
+        #modal_gif_container canvas { max-width: 100%; max-height: 50vh; object-fit: contain; margin: 0 auto; border-radius: 0.5rem; }
+    </style>
+
+    <!-- Firebase SDK 로드 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        window.firebaseDeps = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot };
+    </script>
+
+    <!-- 어플리케이션 메인 로직 -->
     <script>
         window.signatureApp = function() {
             return {
@@ -35,10 +58,16 @@
                 isDownloading: false,
                 activeTab: 'basic', 
                 
-                userId: null,
+                // 알림창(Toast) 상태
+                toastMessage: '',
+                toastTimeout: null,
+                
+                // Firebase 관련 상태 변수
                 appId: null,
+                userId: null,
                 db: null,
                 isSyncing: false,
+                _unsubscribe: null, 
                 
                 isDarkMode: true,
                 isViewerMode: false,
@@ -63,13 +92,37 @@
                 newEventTargets: '',
                 newMemberName: '',
                 
-                // 웹 자산 일괄 연결 폼 상태
                 webAssetBaseUrl: './assets/',
                 webAssetImgExt: '.gif',
                 webAssetAudioExt: '.mp3',
 
                 detailFilter: 'all',
                 searchQuery: '', 
+                
+                zoomLevel: 3,
+                zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
+                zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
+                get zoomGridClass() {
+                    if (!this.isViewerMode) return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5';
+                    const maps = {
+                        1: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
+                        2: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-8',
+                        3: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
+                        4: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
+                        5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+                    };
+                    return maps[this.zoomLevel] || maps[3];
+                },
+                get zoomTextClassId() {
+                    if (!this.isViewerMode) return 'text-xs md:text-sm';
+                    const maps = { 1: 'text-[10px] md:text-xs', 2: 'text-xs md:text-sm', 3: 'text-sm md:text-base', 4: 'text-base md:text-lg', 5: 'text-lg md:text-xl' };
+                    return maps[this.zoomLevel] || maps[3];
+                },
+                get zoomTextClassName() {
+                    if (!this.isViewerMode) return 'text-sm md:text-base';
+                    const maps = { 1: 'text-xs md:text-sm', 2: 'text-sm md:text-base', 3: 'text-base md:text-lg', 4: 'text-lg md:text-xl', 5: 'text-xl md:text-2xl' };
+                    return maps[this.zoomLevel] || maps[3];
+                },
                 
                 groups: [{ id: 'g_default', name: '기본 목록 (미분류)', start: null, end: null, color: '#6B7280' }],
                 events: [], 
@@ -83,15 +136,19 @@
                     const urlParams = new URLSearchParams(window.location.search);
                     if (urlParams.get('viewer') === 'true') {
                         this.isViewerMode = true;
-                        
-                        // 🔒 뷰어 모드 보안 강화 (우클릭, 드래그, 텍스트 선택 방지)
                         document.addEventListener('contextmenu', e => e.preventDefault());
                         document.addEventListener('dragstart', e => e.preventDefault());
                         document.addEventListener('selectstart', e => e.preventDefault());
                     }
 
                     this.initDragScroll(); 
-                    this.initFirebase();   
+                    this.initFirebase(); 
+                },
+
+                showToast(msg) {
+                    this.toastMessage = msg;
+                    if(this.toastTimeout) clearTimeout(this.toastTimeout);
+                    this.toastTimeout = setTimeout(() => { this.toastMessage = ''; }, 4000);
                 },
 
                 initDragScroll() {
@@ -123,7 +180,7 @@
                     };
                     setTimeout(() => {
                         if (!this.isViewerMode) attach(this.$refs.leftPanel);
-                        attach(this.$refs.rightPanel);
+                        if (!this.isViewerMode) attach(this.$refs.rightPanel); 
                     }, 100);
                 },
 
@@ -133,52 +190,70 @@
                         return;
                     }
                     try {
-                        const myFirebaseConfig = {
-                            // apiKey: "AIzaSyDOCAbC123dEf456GhI789jKl01-MnO",
-                            // authDomain: "myapp-12345.firebaseapp.com",
-                            // projectId: "myapp-12345",
-                            // storageBucket: "myapp-12345.appspot.com",
-                            // messagingSenderId: "1234567890",
-                            // appId: "1:1234567890:web:abc123def456"
-                        };
+                        let firebaseConfig;
+                        try {
+                            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+                        } catch (e) {}
 
-                        let firebaseConfig = myFirebaseConfig;
-                        const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-                        if (Object.keys(myFirebaseConfig).length === 0 && configStr !== '{}') {
-                            firebaseConfig = JSON.parse(configStr);
-                        }
-
-                        if (!firebaseConfig.apiKey) {
-                            console.log("Firebase 설정이 비어있어 로컬 전용 모드로 작동합니다.");
-                            return;
+                        if (!firebaseConfig) {
+                            firebaseConfig = {
+                                apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
+                                authDomain: "excel-ec5e4.firebaseapp.com",
+                                projectId: "excel-ec5e4",
+                                storageBucket: "excel-ec5e4.firebasestorage.app",
+                                messagingSenderId: "427552489685",
+                                appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
+                                measurementId: "G-TGR2BVMHD4"
+                            };
                         }
 
                         const app = window.firebaseDeps.initializeApp(firebaseConfig);
-                        const auth = window.firebaseDeps.getAuth(app);
                         this.db = window.firebaseDeps.getFirestore(app);
-                        this.appId = 'my-signature-board'; 
+                        this.appId = typeof __app_id !== 'undefined' ? __app_id : 'excel-signature-board';
 
-                        await window.firebaseDeps.signInAnonymously(auth);
+                        const auth = window.firebaseDeps.getAuth(app);
+                        
+                        const initAuth = async () => {
+                            try {
+                                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                    await window.firebaseDeps.signInWithCustomToken(auth, __initial_auth_token);
+                                } else {
+                                    await window.firebaseDeps.signInAnonymously(auth);
+                                }
+                            } catch (err) {
+                                console.warn("인증 실패, 우회 시도:", err);
+                                try {
+                                    await window.firebaseDeps.signInAnonymously(auth);
+                                } catch (err2) {
+                                    console.error("익명 로그인도 실패:", err2);
+                                }
+                            }
+                        };
+                        
+                        await initAuth();
 
                         window.firebaseDeps.onAuthStateChanged(auth, (user) => {
                             if (user) {
                                 this.userId = user.uid;
-                                this.loadCloudData();
+                                this.loadCloudData(); 
                             } else {
                                 this.userId = null;
                             }
                         });
+
                     } catch(e) {
                         console.error("Firebase 초기화 오류:", e);
                     }
                 },
 
                 loadCloudData() {
-                    if (!this.userId || !this.db) return;
+                    if (!this.db || !this.userId || this._unsubscribe) return; 
+                    
                     const { doc, onSnapshot } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'settings', 'signature_settings');
+                    
+                    const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
 
-                    onSnapshot(configDoc, (snapshot) => {
+                    this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
                         if (snapshot.exists()) {
                             this.isSyncing = true;
                             const data = snapshot.data();
@@ -193,10 +268,11 @@
                                     if(existingItem) {
                                         Object.assign(existingItem, conf);
                                         if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
+                                        else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
                                     } else {
                                         this.items.push({
                                             ...conf,
-                                            imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : this.getPlaceholderImage(),
+                                            imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
                                             hasAudio: conf.hasAudio || !!conf.audioUrl,
                                             hasImage: conf.hasImage || !!conf.mediaUrl,
                                             isGif: conf.isGif || false,
@@ -211,14 +287,18 @@
                             setTimeout(() => { this.isSyncing = false; }, 100);
                         }
                     }, (error) => {
-                        console.error("Firestore 동기화 오류:", error);
+                        console.error("Firestore 동기화 권한 에러:", error);
+                        if (error.code === 'permission-denied') {
+                            this.showToast("에러: 파이어베이스의 읽기/쓰기 권한이 막혀있습니다.");
+                        }
                     });
                 },
 
                 saveCloudData() {
-                    if (!this.userId || !this.db || this.isSyncing) return;
+                    if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
+                    
                     const { doc, setDoc } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'settings', 'signature_settings');
+                    const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
                     
                     const itemConfigs = this.items.map(i => ({
                         id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
@@ -232,7 +312,10 @@
                         members: JSON.parse(JSON.stringify(this.members)),
                         events: JSON.parse(JSON.stringify(this.events)),
                         itemConfigs: itemConfigs
-                    }, {merge: true}).catch(e => console.error(e));
+                    }, {merge: true}).catch(e => {
+                        console.error("저장 권한 에러:", e);
+                        this.showToast("저장 실패: 파이어베이스 권한을 확인해주세요.");
+                    });
                 },
 
                 async exportSettings() {
@@ -259,11 +342,12 @@
                             const writable = await handle.createWritable();
                             await writable.write(jsonString);
                             await writable.close();
-                            alert("설정 백업 파일이 선택한 폴더에 성공적으로 저장되었습니다.");
+                            this.showToast("설정 백업 파일이 선택한 폴더에 성공적으로 저장되었습니다.");
                         } else {
                             const blob = new Blob([jsonString], { type: 'application/json' });
                             const url = URL.createObjectURL(blob);
                             this.triggerDownload(url, filename);
+                            this.showToast("백업 파일이 다운로드되었습니다.");
                         }
                     } catch (e) {
                         if (e.name !== 'AbortError') console.error(e);
@@ -273,7 +357,7 @@
                 async exportFrozenImagesZip() {
                     const frozenItems = this.items.filter(i => i.isFrozen && i.frozenDataUrl);
                     if (frozenItems.length === 0) {
-                        alert("현재 캡처(고정)된 썸네일이 없습니다. 스튜디오에서 프레임을 먼저 캡처해주세요.");
+                        this.showToast("현재 캡처(고정)된 썸네일이 없습니다. 스튜디오에서 프레임을 먼저 캡처해주세요.");
                         return;
                     }
                     
@@ -288,9 +372,10 @@
                         const content = await zip.generateAsync({type:"blob"});
                         const url = URL.createObjectURL(content);
                         this.triggerDownload(url, `캡처_썸네일_일괄백업_${this.lastModified}.zip`);
+                        this.showToast("ZIP 압축 백업이 완료되었습니다.");
                     } catch(e) {
                         console.error("ZIP 생성 오류:", e);
-                        alert("ZIP 파일 생성 중 오류가 발생했습니다.");
+                        this.showToast("ZIP 파일 생성 중 오류가 발생했습니다.");
                     }
                 },
 
@@ -327,9 +412,9 @@
                             }
                             this.reassignGroups();
                             this.saveCloudData();
-                            alert("설정이 성공적으로 복구되었습니다!\n\n※ 로컬 폴더 연동을 사용하셨다면 [일괄 폴더 업로드] 버튼을 한 번 더 눌러주세요. (웹 서버 일괄 연결을 쓰셨다면 누를 필요 없습니다.)");
+                            this.showToast("설정이 성공적으로 복구되었습니다! (웹 링크 연동 기준)");
                         } catch(err) {
-                            alert("설정 파일을 읽는 중 오류가 발생했습니다.");
+                            this.showToast("설정 파일을 읽는 중 오류가 발생했습니다.");
                         }
                     };
                     reader.readAsText(file);
@@ -368,7 +453,7 @@
                         } else if (file.type.startsWith('audio/') || file.name.toLowerCase().match(/\.(mp3|wav|ogg|m4a)$/)) {
                             tempMap[numericId].audioName = file.name.replace(/\.[^/.]+$/, "");
                             tempMap[numericId].hasAudio = true;
-                            tempMap[numericId].audioUrl = URL.createObjectURL(file); // 로컬 오디오 재생 지원
+                            tempMap[numericId].audioUrl = URL.createObjectURL(file); 
                         }
                     }
 
@@ -393,7 +478,7 @@
                             }
                             if (tempMap[id].hasAudio) {
                                 existingItem.name = tempMap[id].audioName;
-                                existingItem.audioUrl = tempMap[id].audioUrl; // 로컬 오디오 업데이트
+                                existingItem.audioUrl = tempMap[id].audioUrl; 
                                 existingItem.hasAudio = true;
                             }
                             if (!existingItem.isPersonal && !existingItem.groupId) existingItem.groupId = targetGroupId;
@@ -420,11 +505,11 @@
                     this.items.sort((a, b) => a.id - b.id);
                     e.target.value = '';
                     this.saveCloudData(); 
+                    this.showToast("폴더 파일이 성공적으로 업로드되었습니다.");
                 },
 
-                // 웹 서버 에셋 자동 연동 로직
                 autoLinkWebAssets() {
-                    if(!this.webAssetBaseUrl.trim()) { alert("폴더 주소를 입력해주세요."); return; }
+                    if(!this.webAssetBaseUrl.trim()) { this.showToast("폴더 주소를 입력해주세요."); return; }
                     let count = 0;
                     const baseUrl = this.webAssetBaseUrl.trim();
                     
@@ -452,10 +537,9 @@
                     });
                     
                     this.saveCloudData();
-                    alert(`${count}개의 시그니처에 웹 서버 주소가 성공적으로 매핑되었습니다!`);
+                    this.showToast(`${count}개의 시그니처에 웹 서버 주소가 성공적으로 매핑되었습니다!`);
                 },
 
-                // 엑셀 외부링크 파일로 일괄 등록 엔진
                 importExcelLinks(e) {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -569,21 +653,20 @@
                             if (updatedCount > 0 || addedCount > 0) {
                                 this.items.sort((a, b) => a.id - b.id);
                                 this.saveCloudData();
-                                alert(`엑셀 데이터 동기화 성공!\n새로 생성된 시그니처 틀: ${addedCount}개\n링크 업데이트: ${updatedCount}개`);
+                                this.showToast(`엑셀 동기화 완료! (새로 생성: ${addedCount}개 / 업데이트: ${updatedCount}개)`);
                             } else {
-                                alert("가져올 데이터(링크 또는 항목)를 찾지 못했습니다. 양식을 다시 확인해주세요.");
+                                this.showToast("가져올 데이터(링크 또는 항목)를 찾지 못했습니다. 양식을 다시 확인해주세요.");
                             }
 
                         } catch (err) {
                             console.error(err);
-                            alert("엑셀 파일을 분석하는 중 오류가 발생했습니다.");
+                            this.showToast("엑셀 파일을 분석하는 중 오류가 발생했습니다.");
                         }
                         e.target.value = ''; // Reset input
                     };
                     reader.readAsArrayBuffer(file);
                 },
 
-                // 오디오 재생/정지 로직
                 playAudio(item) {
                     if(!item.audioUrl) return;
                     const audioId = 'audio_player_' + item.id;
@@ -596,7 +679,7 @@
                             audio.pause();
                         }
                     } else {
-                        alert("오디오 파일을 찾을 수 없습니다.");
+                        this.showToast("오디오 파일을 찾을 수 없습니다.");
                     }
                 },
 
@@ -637,6 +720,7 @@
                 },
                 getPersonalItemsByMember(memberId) { return this.items.filter(i => i.isPersonal && i.memberId === memberId); },
                 getUnassignedPersonalItems() { return this.items.filter(i => i.isPersonal && !i.memberId); },
+                get newItems() { return this.items.filter(i => i.isNew); },
 
                 get filteredItems() {
                     let result = this.items;
@@ -679,25 +763,40 @@
                         this.$nextTick(() => { this.initSuperGif(); });
                     }
                 },
-                initSuperGif() {
+                async initSuperGif() {
                     if (typeof SuperGif === 'undefined') {
-                        alert('GIF 디코딩 라이브러리를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.');
+                        this.showToast('GIF 디코딩 라이브러리를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.');
                         return;
                     }
                     this.isGifLoading = true;
                     const container = document.getElementById('modal_gif_container');
                     
-                    container.innerHTML = `<img id="modal_gif_target" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" rel:auto_play="0" style="display:none;" />`;
+                    let targetUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
+                    let objectUrl = null;
+
+                    // CORS 에러(Tainted canvas) 방지 및 완벽한 로딩을 위한 Fetch API 적용
+                    try {
+                        const response = await fetch(targetUrl, { cache: "no-store" });
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        const blob = await response.blob();
+                        objectUrl = URL.createObjectURL(blob);
+                        targetUrl = objectUrl;
+                    } catch (e) {
+                        console.warn("CORS fetch failed, using original URL fallback", e);
+                    }
+                    
+                    container.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
                     const img = document.getElementById('modal_gif_target');
                     
                     const fallbackTimer = setTimeout(() => {
                         if(this.isGifLoading) {
                             this.isGifLoading = false;
-                            alert('GIF 파일 용량이 너무 크거나 손상되어 분석에 실패했습니다. 기본 이미지 모드로 전환됩니다.');
+                            this.showToast('GIF 파일 용량이 커서 분석이 지연되었습니다. 기본 모드로 전환됩니다.');
                             if(this.gifInstance) this.gifInstance = null;
                             container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                            if (objectUrl) URL.revokeObjectURL(objectUrl);
                         }
-                    }, 15000);
+                    }, 20000);
 
                     try {
                         this.gifInstance = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
@@ -707,9 +806,10 @@
                             
                             const length = this.gifInstance.get_length();
                             if(length === 0) {
-                                alert('GIF 프레임을 분석할 수 없는 규격입니다.');
+                                this.showToast('GIF 프레임을 분석할 수 없는 규격입니다.');
                                 this.gifInstance = null;
                                 container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                                if (objectUrl) URL.revokeObjectURL(objectUrl);
                                 return;
                             }
 
@@ -729,6 +829,7 @@
                         this.isGifLoading = false;
                         console.error('SuperGif init error:', e);
                         container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                        if (objectUrl) URL.revokeObjectURL(objectUrl);
                     }
                 },
                 closeGifModal() {
@@ -824,10 +925,30 @@
 
                 cleanName(name) { return name.replace(/^[\d_.\s]+/, ''); },
 
-                // 엑셀 다운로드 
+                copyViewerLink() {
+                    const url = window.location.origin + window.location.pathname + '?viewer=true';
+                    // 게시판 등에 바로 붙여넣을 수 있는 모바일 최적화 반응형 iframe 태그
+                    const iframeCode = `<iframe src="${url}" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; min-height: 800px; max-width: 100%;" allowfullscreen></iframe>`;
+                    
+                    const textArea = document.createElement("textarea");
+                    textArea.value = iframeCode;
+                    textArea.style.position = "fixed";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.showToast('뷰어 전용 HTML 태그(iframe)가 복사되었습니다!');
+                    } catch (err) {
+                        console.error('Fallback: Oops, unable to copy', err);
+                        this.showToast('태그 복사에 실패했습니다.');
+                    }
+                    document.body.removeChild(textArea);
+                },
+
                 async exportExcel() {
                     if(this.items.length === 0) {
-                        alert("출력할 목록이 없습니다."); return;
+                        this.showToast("출력할 목록이 없습니다."); return;
                     }
                     const data = []; const merges = [];
                     data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]);
@@ -888,6 +1009,7 @@
                             });
                             const writable = await handle.createWritable();
                             await writable.write(blob); await writable.close();
+                            this.showToast("엑셀 파일이 성공적으로 저장되었습니다.");
                         } else {
                             XLSX.writeFile(wb, filename); 
                         }
@@ -895,7 +1017,7 @@
                 },
 
                 async downloadImage() {
-                    if (this.items.length === 0) { alert("다운로드할 내용이 없습니다."); return; }
+                    if (this.items.length === 0) { this.showToast("다운로드할 내용이 없습니다."); return; }
                     this.isDownloading = true;
 
                     let dirHandle = null;
@@ -940,7 +1062,7 @@
 
                         if (canvas.height <= MAX_HEIGHT) {
                             await saveCanvasPart(canvas, `시그니처보드_${this.lastModified}.webp`);
-                            alert(dirHandle ? "지정한 폴더에 WebP 형식으로 이미지가 저장되었습니다." : "WebP 형식으로 이미지가 다운로드 되었습니다.");
+                            this.showToast(dirHandle ? "지정한 폴더에 WebP 이미지로 저장되었습니다." : "WebP 이미지가 다운로드 되었습니다.");
                         } else {
                             let currentY = 0; let partNum = 1;
                             while (currentY < canvas.height) {
@@ -961,10 +1083,10 @@
                                 await saveCanvasPart(partCanvas, `시그니처보드_${this.lastModified}_part${partNum}.webp`);
                                 currentY = nextY; partNum++;
                             }
-                            alert(`이미지 절단 방지 로직 적용 완료!\n${dirHandle ? '지정한 폴더에' : ''} 최고 화질 WebP로 넉넉하게 ${partNum - 1}장 분할 저장되었습니다.`);
+                            this.showToast(`이미지가 너무 길어 ${partNum - 1}장으로 분할 저장되었습니다.`);
                         }
                     } catch(e) {
-                        console.error("캡처 오류:", e); alert('이미지 생성 중 오류가 발생했습니다.');
+                        console.error("캡처 오류:", e); this.showToast('이미지 생성 중 오류가 발생했습니다.');
                     } finally { this.isDownloading = false; }
                 },
 
@@ -975,75 +1097,72 @@
             };
         };
     </script>
-    
-    <!-- Alpine.js -->
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <!-- html2canvas -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'] },
-                    colors: { board: '#111827', panel: '#1f2937' }
-                }
-            }
-        }
-    </script>
-    <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        body { font-family: 'Pretendard', sans-serif; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-        [x-cloak] { display: none !important; }
-        .sortable-ghost { opacity: 0.4; background-color: #f9fafb; }
-        /* GIF 캔버스 크기 제어 */
-        #modal_gif_container canvas { max-width: 100%; max-height: 50vh; object-fit: contain; margin: 0 auto; border-radius: 0.5rem; }
-    </style>
 </head>
-<body class="h-screen max-h-screen flex flex-col overflow-hidden transition-colors duration-300" :class="isDarkMode ? 'bg-gray-100 text-gray-800' : 'bg-gray-50 text-gray-800'" x-data="signatureApp()" x-cloak>
+
+<body class="transition-colors duration-300" 
+      :class="isViewerMode ? (isDarkMode ? 'bg-gray-100 text-gray-800' : 'bg-gray-50 text-gray-800') : (isDarkMode ? 'bg-gray-100 text-gray-800 h-screen max-h-screen flex flex-col overflow-hidden' : 'bg-gray-50 text-gray-800 h-screen max-h-screen flex flex-col overflow-hidden')" 
+      x-data="signatureApp()" x-cloak>
     
-    <!-- 상단 네비게이션바 -->
-    <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 shrink-0 z-10 select-none border-b">
-        <div class="flex items-center gap-4">
-            <div class="flex items-center gap-2">
-                <i class="ph-fill ph-magic-wand text-blue-600 text-2xl"></i>
-                <h1 class="font-bold text-xl">시그니처 보드 매니저 Pro</h1>
-                <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-2" x-show="isSyncing">클라우드 동기화 됨</span>
+    <!-- 상단 네비게이션바 (높이 및 로고 크기 최적화 완료) -->
+    <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b gap-2">
+        <div class="flex items-center gap-2 sm:gap-4 overflow-hidden">
+            <div class="flex items-center gap-2 shrink-0">
+                <!-- 로고 크기 축소 (h-8 ~ h-10) 및 이쁘게 정렬 -->
+                <img src="logo.png" alt="771 Logo" class="h-8 sm:h-10 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <i class="ph-fill ph-magic-wand text-blue-600 text-3xl sm:text-4xl" style="display: none;"></i>
+                
+                <h1 class="font-black text-base sm:text-xl ml-1 shrink-0">771 시그니처 뷰어</h1>
+                
+                <!-- 동기화 상태 -->
+                <span class="text-[10px] sm:text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-1 border border-green-200 shrink-0 hidden md:inline-block" x-show="isSyncing">동기화 중</span>
+                
+                <!-- 링크 발급 버튼 -->
+                <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors shadow-sm shrink-0" title="HTML 게시글용 링크 복사">
+                    <i class="ph ph-link text-sm"></i> <span class="hidden sm:inline">뷰어 링크</span>
+                </button>
             </div>
-            <!-- 다크모드 / 라이트모드 토글 버튼 -->
-            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-4 text-gray-600" title="테마 변경">
+            
+            <!-- 테마 변경 버튼 -->
+            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-auto shrink-0" title="테마 변경">
                 <i class="ph-fill ph-moon text-lg" x-show="!isDarkMode"></i>
                 <i class="ph-fill ph-sun text-lg" x-show="isDarkMode" style="display: none;"></i>
             </button>
         </div>
-        <div class="flex items-center gap-3">
-            <!-- 뷰어 모드 전용 보드 내 검색창 -->
-            <div x-show="isViewerMode" class="relative mr-4">
-                <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                <input type="text" x-model="searchQuery" placeholder="보드 내 시그니처 검색..." class="border border-gray-300 rounded-full pl-10 pr-4 py-1.5 text-sm focus:outline-blue-500 w-64 bg-gray-50 transition-all focus:w-80">
+        
+        <div class="flex items-center gap-2">
+            <!-- 뷰어 줌 컨트롤러 -->
+            <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 shadow-sm border border-gray-200 shrink-0" title="화면 확대/축소">
+                <button @click="zoomOut()" class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
+                    <i class="ph ph-minus font-bold text-sm sm:text-base"></i>
+                </button>
+                <span class="text-[10px] sm:text-xs font-bold w-10 sm:w-12 text-center text-gray-700" x-text="['50%', '75%', '100%', '125%', '150%'][zoomLevel - 1]"></span>
+                <button @click="zoomIn()" class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel >= 5">
+                    <i class="ph ph-plus font-bold text-sm sm:text-base"></i>
+                </button>
             </div>
 
-            <button x-show="!isViewerMode" @click="exportExcel()"
-                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors shadow-sm">
-                <i class="ph ph-file-xls"></i> 엑셀 업로드 양식 받기
+            <!-- 관리자용 기능들 -->
+            <button x-show="!isViewerMode" @click="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm shrink-0 hidden sm:flex">
+                <i class="ph ph-file-xls"></i> 엑셀 양식
             </button>
-            <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50">
+            <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 shrink-0">
                 <i class="ph ph-download-simple" x-show="!isDownloading"></i>
                 <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
-                <span x-text="isDownloading ? '고화질 이미지 생성 중...' : '표 이미지 다운로드'"></span>
+                <span x-text="isDownloading ? '캡처 중...' : '이미지 캡처'"></span>
             </button>
         </div>
     </header>
 
+    <!-- 모바일 검색창 (뷰어 모드 전용) -->
+    <div x-show="isViewerMode" class="bg-white px-4 py-2 border-b w-full shrink-0">
+        <div class="relative w-full max-w-md mx-auto">
+            <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+            <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="w-full border border-gray-300 rounded-full pl-10 pr-4 py-1.5 text-sm focus:outline-blue-500 bg-gray-50 transition-all shadow-sm">
+        </div>
+    </div>
+
     <!-- 메인 워크스페이스 -->
-    <main class="flex flex-1 overflow-hidden min-h-0 relative">
+    <main class="flex flex-1 relative" :class="isViewerMode ? 'flex-col' : 'overflow-hidden min-h-0'">
         
         <!-- 좌측 관리자 패널 (뷰어 모드일 때 숨김) -->
         <aside x-show="!isViewerMode" class="w-[500px] bg-white border-r border-gray-200 flex flex-col shrink-0 min-h-0">
@@ -1082,9 +1201,6 @@
                         <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-indigo-900">
                             <i class="ph ph-globe"></i> [방법2] 웹 서버 링크로 일괄 연결
                         </h2>
-                        <p class="text-xs text-indigo-700 mb-3 leading-relaxed">
-                            웹(GitHub 등)에 올린 <code>assets</code> 폴더 주소를 입력하시면, 1번부터 끝 번호까지 인터넷 주소로 자동 매핑해줍니다! <b>뷰어들이 원본을 보게 하려면 이 기능을 꼭 사용하세요.</b>
-                        </p>
                         <div class="flex flex-col gap-2">
                             <div class="flex items-center gap-2">
                                 <span class="text-sm font-bold text-indigo-800 w-24">웹 폴더 주소:</span>
@@ -1109,7 +1225,7 @@
                                 </select>
                             </div>
                             <button @click="autoLinkWebAssets()" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                                <i class="ph-fill ph-link"></i> 서버 주소로 전체 시그니처 자동 매핑
+                                <i class="ph-fill ph-link"></i> 서버 주소로 전체 매핑
                             </button>
                         </div>
                     </section>
@@ -1119,10 +1235,7 @@
                         <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-emerald-900">
                             <i class="ph ph-file-xls"></i> [방법3] 엑셀 외부링크 일괄 등록
                         </h2>
-                        <p class="text-xs text-emerald-700 mb-3 leading-relaxed">
-                            다운로드한 <b>엑셀 파일의 D열(링크)</b>에 호스팅해 둔 이미지나 음원의 URL을 적어 넣고 업로드하시면, 시그니처 보드에 외부링크가 1초만에 일괄 등록됩니다. 서버 부하를 획기적으로 줄일 수 있습니다.
-                        </p>
-                        <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm">
+                        <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm mt-2">
                             <input type="file" accept=".xlsx, .xls, .csv" @change="importExcelLinks" class="hidden">
                             <div class="flex items-center gap-2">
                                 <i class="ph ph-upload-simple text-xl"></i>
@@ -1152,7 +1265,7 @@
                         </div>
                     </section>
                     
-                    <!-- 멤버 관리 (드래그 정렬 지원) -->
+                    <!-- 멤버 관리 -->
                     <section class="select-none">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2">개인 시그니처 멤버 관리 (드래그 정렬)</h2>
                         <div class="flex gap-2 mb-3">
@@ -1160,7 +1273,6 @@
                             <button @click="addMember()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700">추가</button>
                         </div>
                         
-                        <!-- Sortable 멤버 리스트 -->
                         <div class="space-y-2" x-init="new Sortable($el, { animation: 150, handle: '.drag-handle', onEnd: e => reorderMembers(e.oldIndex, e.newIndex) })">
                             <template x-for="member in members" :key="member.id">
                                 <div class="flex justify-between items-center bg-white border px-3 py-2 rounded shadow-sm group">
@@ -1174,7 +1286,7 @@
                         </div>
                     </section>
 
-                    <!-- 숫자 범위 그룹 관리 (컬러 추가) -->
+                    <!-- 자동 그룹 관리 -->
                     <section class="select-none">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2">자동 분류 그룹 관리 (드래그 정렬)</h2>
                         <div class="flex flex-col gap-2 mb-3 bg-gray-50 p-3 rounded border">
@@ -1224,7 +1336,7 @@
                                             </div>
                                             <div class="flex justify-end gap-2 mt-1">
                                                 <button @click="cancelEditGroup()" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-300 font-bold">취소</button>
-                                                <button @click="saveEditGroup(group.id)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold">변경사항 저장</button>
+                                                <button @click="saveEditGroup(group.id)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold">저장</button>
                                             </div>
                                         </div>
                                     </template>
@@ -1233,7 +1345,7 @@
                         </div>
                     </section>
 
-                    <!-- 설정 백업 및 복구 영역 -->
+                    <!-- 설정 백업/복구 -->
                     <section class="select-none pt-4 border-t border-gray-200">
                         <h2 class="font-bold text-lg mb-3 pb-2 text-gray-800">
                             <i class="ph-fill ph-floppy-disk mr-1 text-blue-600"></i> 설정 수동 백업 및 복구
@@ -1262,7 +1374,6 @@
                         <span class="text-sm font-bold text-blue-600" x-text="`검색된 항목: ${filteredItems.length}개`"></span>
                     </div>
 
-                    <!-- 상세 설정 전용 탭(필터바) -->
                     <div class="mb-2 flex gap-2">
                         <select x-model="detailFilter" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-blue-500 focus:border-blue-500 bg-white text-gray-800 shadow-sm font-bold">
                             <option value="all">📁 모든 시그니처 보기</option>
@@ -1283,10 +1394,9 @@
                         </button>
                     </div>
 
-                    <!-- 실시간 검색바 -->
                     <div class="relative mb-4">
                         <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
-                        <input type="text" x-model="searchQuery" placeholder="시그니처 번호 또는 이름 검색..." class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-blue-500 focus:border-blue-500 bg-gray-50 text-gray-800 shadow-sm transition-all">
+                        <input type="text" x-model="searchQuery" placeholder="시그니처 번호/이름 검색..." class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-blue-500 focus:border-blue-500 bg-gray-50 text-gray-800 shadow-sm transition-all">
                     </div>
 
                     <template x-if="filteredItems.length === 0">
@@ -1311,9 +1421,8 @@
                             </div>
                             
                             <div class="flex gap-3 items-center">
-                                <!-- 팝업 호출 버튼 -->
                                 <div class="relative group w-16 h-9 shrink-0 cursor-pointer" @click="if(item.isGif) openGifModal(item)">
-                                    <img :src="item.imgUrl" class="w-full h-full rounded object-cover border border-gray-300" alt="">
+                                    <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full rounded object-cover border border-gray-300" alt="">
                                     <div x-show="item.isGif" class="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition text-[10px] rounded font-bold leading-tight">
                                         <span>🔍<br>설정</span>
                                     </div>
@@ -1358,34 +1467,79 @@
             </div>
         </aside>
 
-        <!-- 우측 미리보기 (캡처 대상 영역 / 뷰어 모드 시 전체 화면 확장) -->
-        <div class="flex-1 overflow-y-auto p-8 select-none min-h-0 transition-colors duration-300" :class="isDarkMode ? 'bg-gray-400' : 'bg-gray-200'" x-ref="rightPanel">
+        <!-- 우측 미리보기 (캡처 대상 영역 / 뷰어 모드 시 전체 화면 확장 및 스크롤 최적화) -->
+        <div class="flex-1 select-none transition-colors duration-300" :class="[isDarkMode ? 'bg-gray-400' : 'bg-gray-200', isViewerMode ? 'w-full p-4 md:p-8' : 'overflow-y-auto p-8 min-h-0']" x-ref="rightPanel">
             
-            <div id="capture-board" x-ref="captureBoard" class="mx-auto rounded-xl p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative transition-colors duration-300" :class="[isDarkMode ? 'bg-board text-white' : 'bg-gray-50 text-gray-900', isViewerMode ? 'w-full max-w-7xl' : 'w-[1150px]']">
+            <div id="capture-board" x-ref="captureBoard" class="mx-auto rounded-xl p-6 sm:p-10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative transition-colors duration-300" :class="[isDarkMode ? 'bg-board text-white' : 'bg-gray-50 text-gray-900', isViewerMode ? 'w-full max-w-7xl' : 'w-[1150px]']">
                 
                 <!-- 보드 헤더 -->
-                <div class="flex justify-between items-end border-b-4 pb-5 mb-8 avoid-break" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">
-                    <h1 class="text-5xl font-black tracking-tighter" :class="isDarkMode ? 'text-white' : 'text-gray-900'"><span class="text-blue-600">771 EXCEL</span> 시그니처 목록</h1>
-                    <div class="font-bold tracking-widest text-lg px-4 py-1 rounded-full" :class="isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-200 text-gray-600'">
+                <div class="flex flex-col sm:flex-row sm:justify-between items-start sm:items-end border-b-4 pb-5 mb-8 avoid-break gap-4" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">
+                    <h1 class="text-3xl sm:text-5xl font-black tracking-tighter" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                        <span class="text-blue-600">771 EXCEL</span> 시그니처 목록
+                        <span class="text-xl sm:text-2xl font-bold ml-2 sm:ml-3 align-middle tracking-normal" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'" x-text="`총 ${items.length}개`"></span>
+                    </h1>
+                    <div class="font-bold tracking-widest text-sm sm:text-lg px-4 py-1 rounded-full whitespace-nowrap" :class="isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-200 text-gray-600'">
                         UPDATE <span class="ml-2" :class="isDarkMode ? 'text-white' : 'text-gray-900'" x-text="lastModified"></span>
                     </div>
                 </div>
+
+                <!-- NEW 시그니처 하이라이트 영역 -->
+                <template x-if="newItems.length > 0">
+                    <div class="mb-10 relative avoid-break z-10">
+                        <!-- 배경 빛 반사 효과 -->
+                        <div class="absolute -inset-1 bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 rounded-2xl blur-md opacity-40 animate-pulse"></div>
+                        <div class="relative rounded-xl p-6 border-2 transition-colors duration-300 shadow-xl" :class="isDarkMode ? 'bg-gray-800/95 border-yellow-500/70' : 'bg-yellow-50 border-yellow-400'">
+                            
+                            <div class="flex items-center gap-3 mb-5 border-b pb-3 transition-colors duration-300" :class="isDarkMode ? 'border-yellow-500/30' : 'border-yellow-400/50'">
+                                <i class="ph-fill ph-sparkle text-yellow-500 text-3xl"></i>
+                                <h2 class="text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-yellow-400' : 'text-yellow-700'">
+                                    NEW 시그니처
+                                    <span class="text-lg font-bold ml-1" :class="isDarkMode ? 'text-yellow-500/70' : 'text-yellow-600/70'" x-text="`(${newItems.length}개)`"></span>
+                                </h2>
+                            </div>
+
+                            <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
+                                <template x-for="item in newItems" :key="item.id">
+                                    <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
+                                        <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]">
+                                            <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                            <div class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                            
+                                            <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
+                                                <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-col items-center w-full leading-tight px-1">
+                                            <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-yellow-400' : 'text-yellow-600']">
+                                                <span x-text="item.id"></span>
+                                                <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
+                                            </span>
+                                            <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, isDarkMode ? 'text-yellow-300' : 'text-yellow-700']" x-text="cleanName(item.name)"></span>
+                                            <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
 
                 <!-- 특별 일정/이벤트 하이라이트 영역 -->
                 <template x-if="events.length > 0">
                     <div class="mb-10 space-y-6">
                         <template x-for="event in events" :key="event.id">
                             <div class="w-full" x-show="getEventItems(event.targets).length > 0">
-                                <div class="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 p-4 rounded-t-xl shadow-lg avoid-break">
-                                    <h2 class="text-2xl font-black text-white tracking-widest text-center drop-shadow-md" x-text="event.title"></h2>
+                                <div class="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 p-4 rounded-t-xl shadow-lg avoid-break flex justify-center items-center gap-2">
+                                    <h2 class="text-2xl font-black text-white tracking-widest drop-shadow-md text-center" x-text="event.title"></h2>
+                                    <span class="text-lg font-bold text-white/80 drop-shadow-md" x-text="`(${getEventItems(event.targets).length}개)`"></span>
                                 </div>
-                                <div class="p-6 border-x border-b rounded-b-xl transition-colors duration-300" :class="isDarkMode ? 'bg-[#1f2937] border-gray-700' : 'bg-white border-gray-300'">
-                                    <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                                <div class="p-4 sm:p-6 border-x border-b rounded-b-xl transition-colors duration-300" :class="isDarkMode ? 'bg-[#1f2937] border-gray-700' : 'bg-white border-gray-300'">
+                                    <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
                                         <template x-for="item in getEventItems(event.targets)" :key="item.id">
                                             <div class="flex flex-col items-center gap-3 w-full avoid-break">
                                                 <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" 
                                                      :class="item.isNew ? 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
-                                                    <img :src="item.imgUrl" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                                    <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
                                                     <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                                     
                                                     <!-- 보드 내 팝업 호출 버튼 (관리자 전용) -->
@@ -1393,12 +1547,12 @@
                                                         <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
                                                     </div>
                                                 </div>
-                                                <div class="flex flex-col items-center w-full leading-tight">
-                                                    <span class="text-sm font-black text-orange-500 mb-0.5 flex items-center gap-1">
+                                                <div class="flex flex-col items-center w-full leading-tight px-1">
+                                                    <span class="font-black text-orange-500 mb-0.5 flex items-center gap-1 transition-all" :class="zoomTextClassId">
                                                         <span x-text="item.id"></span>
                                                         <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                     </span>
-                                                    <span class="text-base font-bold text-center break-words w-full tracking-tight" :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')" x-text="cleanName(item.name)"></span>
+                                                    <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')]" x-text="cleanName(item.name)"></span>
                                                     <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                                 </div>
                                             </div>
@@ -1413,34 +1567,37 @@
                 <!-- 자동 분류 그룹 리스트 영역 -->
                 <div class="space-y-12">
                     <template x-for="group in groups" :key="group.id">
-                        <div x-show="getItemsByGroup(group.id).length > 0" class="rounded-xl p-6 border shadow-lg transition-colors duration-300 relative overflow-hidden" :class="isDarkMode ? 'bg-panel border-gray-800' : 'bg-white border-gray-200'" :style="`border-top-width: 5px; border-top-color: ${group.color || '#6B7280'};`">
+                        <!-- 항목이 0개면 아예 표시되지 않음 -->
+                        <div x-show="getItemsByGroup(group.id).length > 0" class="rounded-xl p-4 sm:p-6 border shadow-lg transition-colors duration-300 relative overflow-hidden" :class="isDarkMode ? 'bg-panel border-gray-800' : 'bg-white border-gray-200'" :style="`border-top-width: 5px; border-top-color: ${group.color || '#6B7280'};`">
                             
-                            <h2 class="text-2xl font-black mb-5 border-b-2 pb-3 avoid-break flex items-center gap-3 transition-colors duration-300" :class="isDarkMode ? 'text-gray-100 border-gray-700' : 'text-gray-800 border-gray-200'">
-                                <span class="w-4 h-4 rounded-full inline-block shadow-sm" :style="`background-color: ${group.color || '#6B7280'};`"></span>
-                                <span x-text="group.name"></span>
+                            <h2 class="text-xl sm:text-2xl font-black mb-5 border-b-2 pb-3 avoid-break flex items-center gap-3 transition-colors duration-300" :class="isDarkMode ? 'text-gray-100 border-gray-700' : 'text-gray-800 border-gray-200'">
+                                <span class="w-4 h-4 rounded-full inline-block shadow-sm shrink-0" :style="`background-color: ${group.color || '#6B7280'};`"></span>
+                                <span>
+                                    <span x-text="group.name"></span>
+                                    <span class="text-base sm:text-lg font-bold ml-1" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" x-text="`(${getItemsByGroup(group.id).length}개)`"></span>
+                                </span>
                             </h2>
                             
-                            <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                            <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
                                 <template x-for="item in getItemsByGroup(group.id)" :key="item.id">
-                                    <!-- 뷰어 모드일 때 검색어 필터링 적용 -->
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                         <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group hover:border-gray-400" 
                                              :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-600' : 'border-gray-300')">
-                                            <img :src="item.imgUrl" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                            <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
                                             <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                             
                                             <!-- 보드 내 팝업 호출 버튼 (관리자 전용) -->
                                             <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                                <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
+                                                <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                             </div>
                                         </div>
-                                        <div class="flex flex-col items-center w-full leading-tight">
-                                            <span class="text-sm font-black text-blue-500 mb-0.5 flex items-center gap-1">
+                                        <div class="flex flex-col items-center w-full leading-tight px-1">
+                                            <span class="font-black text-blue-500 mb-0.5 flex items-center gap-1 transition-all" :class="zoomTextClassId">
                                                 <span x-text="item.id"></span>
                                                 <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                             </span>
-                                            <span class="text-base font-bold text-center break-words w-full tracking-tight transition-colors duration-300" 
-                                                  :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')" 
+                                            <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" 
+                                                  :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')]" 
                                                   x-text="cleanName(item.name)"></span>
                                             <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                         </div>
@@ -1454,31 +1611,35 @@
                 <!-- 개인 시그니처 영역 -->
                 <div class="mt-12 mb-4 space-y-6">
                     <template x-for="member in members" :key="member.id">
-                        <div x-show="getPersonalItemsByMember(member.id).length > 0 || isViewerMode" class="border-2 rounded-xl p-6 shadow-lg relative overflow-hidden transition-colors duration-300" :class="isDarkMode ? 'bg-blue-900/30 border-blue-500/50' : 'bg-blue-50 border-blue-300'">
+                        <div x-show="getPersonalItemsByMember(member.id).length > 0 || !isViewerMode" class="border-2 rounded-xl p-4 sm:p-6 shadow-lg relative overflow-hidden transition-colors duration-300" :class="isDarkMode ? 'bg-blue-900/30 border-blue-500/50' : 'bg-blue-50 border-blue-300'">
                             <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
                             <div class="flex items-center gap-3 mb-5 border-b pb-3 relative z-10 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-blue-500/30' : 'border-blue-300'">
                                 <i class="ph-fill ph-crown text-blue-500 text-3xl"></i>
-                                <h2 class="text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-blue-100' : 'text-blue-900'"><span x-text="member.name"></span> <span class="text-lg font-medium ml-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">개인 시그니처</span></h2>
+                                <h2 class="text-xl sm:text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-blue-100' : 'text-blue-900'">
+                                    <span x-text="member.name"></span> 
+                                    <span class="text-base sm:text-lg font-medium ml-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">개인 시그니처</span>
+                                    <span class="text-base sm:text-lg font-bold ml-1" :class="isDarkMode ? 'text-blue-400/70' : 'text-blue-400'" x-text="`(${getPersonalItemsByMember(member.id).length}개)`"></span>
+                                </h2>
                             </div>
                             
                             <template x-if="getPersonalItemsByMember(member.id).length > 0">
-                                <div class="grid gap-6 relative z-10" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                                <div class="grid gap-4 sm:gap-6 relative z-10" :class="zoomGridClass">
                                     <template x-for="item in getPersonalItemsByMember(member.id)" :key="item.id">
                                         <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                             <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-blue-400/50' : 'border-blue-400')">
-                                                <img :src="item.imgUrl" class="w-full h-full object-cover">
+                                                <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover">
                                                 <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                                 
                                                 <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                                    <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
+                                                    <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                                 </div>
                                             </div>
-                                            <div class="flex flex-col items-center w-full leading-tight">
-                                                <span class="text-sm font-black mb-0.5 transition-colors duration-300 flex items-center gap-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">
+                                            <div class="flex flex-col items-center w-full leading-tight px-1">
+                                                <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-blue-300' : 'text-blue-600']">
                                                     <span x-text="item.id"></span>
                                                     <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                 </span>
-                                                <span class="text-base font-bold text-center break-words w-full transition-colors duration-300" :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')" x-text="cleanName(item.name)"></span>
+                                                <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')]" x-text="cleanName(item.name)"></span>
                                                 <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                             </div>
                                         </div>
@@ -1487,35 +1648,38 @@
                             </template>
 
                             <template x-if="getPersonalItemsByMember(member.id).length === 0">
-                                <div class="w-full py-8 text-center font-bold text-lg relative z-10 transition-colors duration-300" :class="isDarkMode ? 'text-blue-300/30' : 'text-blue-500/40'">
+                                <div class="w-full py-8 text-center font-bold text-base sm:text-lg relative z-10 transition-colors duration-300" :class="isDarkMode ? 'text-blue-300/30' : 'text-blue-500/40'">
                                     현재 등록된 개인 시그니처가 없습니다.
                                 </div>
                             </template>
                         </div>
                     </template>
 
-                    <div x-show="getUnassignedPersonalItems().length > 0" class="border rounded-xl p-6 shadow-lg transition-colors duration-300" :class="isDarkMode ? 'bg-gray-800/80 border-gray-600' : 'bg-white border-gray-300'">
+                    <div x-show="getUnassignedPersonalItems().length > 0" class="border rounded-xl p-4 sm:p-6 shadow-lg transition-colors duration-300" :class="isDarkMode ? 'bg-gray-800/80 border-gray-600' : 'bg-white border-gray-300'">
                         <div class="flex items-center gap-3 mb-5 border-b pb-3 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-gray-600' : 'border-gray-300'">
                             <i class="ph-fill ph-user text-gray-400 text-2xl"></i>
-                            <h2 class="text-xl font-bold transition-colors duration-300" :class="isDarkMode ? 'text-gray-300' : 'text-gray-800'">미지정 개인 시그니처</h2>
+                            <h2 class="text-xl sm:text-2xl font-bold transition-colors duration-300" :class="isDarkMode ? 'text-gray-300' : 'text-gray-800'">
+                                미지정 개인 시그니처
+                                <span class="text-base sm:text-lg font-bold ml-1" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" x-text="`(${getUnassignedPersonalItems().length}개)`"></span>
+                            </h2>
                         </div>
-                        <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                        <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
                             <template x-for="item in getUnassignedPersonalItems()" :key="item.id">
                                 <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
-                                        <img :src="item.imgUrl" class="w-full h-full object-cover">
+                                        <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover">
                                         <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                         
                                         <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                            <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 팝업 설정</span>
+                                            <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                         </div>
                                     </div>
-                                    <div class="flex flex-col items-center w-full leading-tight">
-                                        <span class="text-sm font-black mb-0.5 transition-colors duration-300 flex items-center gap-1" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">
+                                    <div class="flex flex-col items-center w-full leading-tight px-1">
+                                        <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-gray-400' : 'text-gray-600']">
                                             <span x-text="item.id"></span>
                                             <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                         </span>
-                                        <span class="text-base font-bold text-center break-words w-full transition-colors duration-300" :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')" x-text="cleanName(item.name)"></span>
+                                        <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')]" x-text="cleanName(item.name)"></span>
                                         <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                     </div>
                                 </div>
@@ -1569,24 +1733,24 @@
                     <p class="text-xs text-gray-500 dark:text-gray-400 text-center font-bold">바를 좌우로 드래그하여 가장 마음에 드는 장면을 찾아 캡처하세요!</p>
                 </div>
 
-                <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700">
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex-wrap gap-2">
                     <div class="text-sm font-bold text-gray-600 dark:text-gray-300">
                         <span x-show="modalItem && modalItem.isFrozen" class="text-blue-600 dark:text-blue-400 flex items-center gap-1"><i class="ph-fill ph-check-circle text-lg"></i> 프레임 캡처 완료! (고정됨)</span>
                         <span x-show="modalItem && !modalItem.isFrozen" class="text-orange-500 flex items-center gap-1"><i class="ph-fill ph-film-strip text-lg"></i> 프레임 선택 모드</span>
                     </div>
-                    <div class="flex gap-3">
+                    <div class="flex flex-wrap gap-3">
                         <!-- 캡처된 파일 다운로드 버튼 추가 -->
-                        <button x-show="modalItem && modalItem.isFrozen" @click="downloadCurrentModalFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow">
-                            <i class="ph-fill ph-download-simple"></i> 파일 다운로드
+                        <button x-show="modalItem && modalItem.isFrozen" @click="downloadCurrentModalFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            <i class="ph-fill ph-download-simple"></i> 다운로드
                         </button>
                         
-                        <button x-show="modalItem && modalItem.isFrozen" @click="resetModalFrame()" class="bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow">
-                            <i class="ph-fill ph-play"></i> 고정 풀기 (GIF 원본 재생)
+                        <button x-show="modalItem && modalItem.isFrozen" @click="resetModalFrame()" class="bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            <i class="ph-fill ph-play"></i> 고정 풀기
                         </button>
-                        <button x-show="modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow">
-                            <i class="ph-fill ph-camera"></i> 현재 프레임 영구 캡처
+                        <button x-show="modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            <i class="ph-fill ph-camera"></i> 현재 프레임 캡처
                         </button>
-                        <button @click="closeGifModal()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow">
+                        <button @click="closeGifModal()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             닫기
                         </button>
                     </div>
@@ -1595,5 +1759,20 @@
             </div>
         </div>
     </div>
+
+    <!-- 자체 알림창 (Toast Notification) -->
+    <div x-show="toastMessage" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform translate-y-10"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform translate-y-0"
+         x-transition:leave-end="opacity-0 transform translate-y-10"
+         class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-6 py-3 rounded-full shadow-2xl z-[100] font-bold tracking-wide flex items-center gap-3 backdrop-blur-md border border-gray-700" 
+         style="display: none;">
+        <i class="ph-fill ph-info text-blue-400 text-xl"></i>
+        <span x-text="toastMessage"></span>
+    </div>
+
 </body>
 </html>
