@@ -1,0 +1,840 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+window.firebaseDeps = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot };
+
+// Alpine JS 초기화 (모듈 및 상태 관리 분리)
+document.addEventListener('alpine:init', () => {
+    Alpine.data('signatureApp', () => ({
+        lastModified: '',
+        isDownloading: false,
+        activeTab: 'basic', 
+        
+        toastMessage: '',
+        toastTimeout: null,
+        
+        appId: null,
+        userId: null,
+        db: null,
+        isSyncing: false,
+        _unsubscribe: null, 
+        
+        isDarkMode: true,
+        isViewerMode: false,
+
+        modalOpen: false,
+        modalItem: null,
+        gifInstance: null,
+        gifInterval: null,
+        isGifLoading: false,
+        gifTotalFrames: 0,
+        gifCurrentFrame: 0,
+        isPlaying: false,
+
+        newGroupName: '',
+        newGroupStart: '',
+        newGroupEnd: '',
+        newGroupColor: '#3B82F6',
+        editingGroupId: null,
+        editGroupData: { name: '', start: '', end: '', color: '' },
+
+        newEventTitle: '',
+        newEventTargets: '',
+        newMemberName: '',
+        
+        webAssetBaseUrl: './assets/',
+        webAssetImgExt: '.gif',
+        webAssetAudioExt: '.mp3',
+
+        detailFilter: 'all',
+        searchQuery: '', 
+        
+        zoomLevel: 3,
+        zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
+        zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
+        
+        get zoomGridClass() {
+            if (!this.isViewerMode) return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5';
+            const maps = {
+                1: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
+                2: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-8',
+                3: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
+                4: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
+                5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+            };
+            return maps[this.zoomLevel] || maps[3];
+        },
+        get zoomTextClassId() {
+            if (!this.isViewerMode) return 'text-xs md:text-sm';
+            const maps = { 1: 'text-[10px] md:text-xs', 2: 'text-xs md:text-sm', 3: 'text-sm md:text-base', 4: 'text-base md:text-lg', 5: 'text-lg md:text-xl' };
+            return maps[this.zoomLevel] || maps[3];
+        },
+        get zoomTextClassName() {
+            if (!this.isViewerMode) return 'text-sm md:text-base';
+            const maps = { 1: 'text-xs md:text-sm', 2: 'text-sm md:text-base', 3: 'text-base md:text-lg', 4: 'text-lg md:text-xl', 5: 'text-xl md:text-2xl' };
+            return maps[this.zoomLevel] || maps[3];
+        },
+        
+        groups: [{ id: 'g_default', name: '기본 목록 (미분류)', start: null, end: null, color: '#6B7280' }],
+        events: [], 
+        members: [], 
+        items: [], 
+
+        init() {
+            const d = new Date();
+            this.lastModified = `${d.getFullYear().toString().slice(-2)}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('viewer') === 'true') {
+                this.isViewerMode = true;
+                document.addEventListener('contextmenu', e => e.preventDefault());
+                document.addEventListener('dragstart', e => e.preventDefault());
+                document.addEventListener('selectstart', e => e.preventDefault());
+            }
+
+            this.initDragScroll(); 
+            this.initFirebase(); 
+        },
+
+        // GitHub HTTPS 강제 차단(Mixed Content) 방어 로직
+        upgradeHttps(url) {
+            if (!url) return '';
+            return url.replace(/^http:\/\//i, 'https://');
+        },
+
+        // 개별 외부 이미지 입력 핸들러
+        updateMediaUrl(item) {
+            if (item.mediaUrl) {
+                let safeUrl = this.upgradeHttps(item.mediaUrl.trim());
+                item.mediaUrl = safeUrl;
+                item.imgUrl = safeUrl;
+                item.hasImage = true;
+                item.isGif = safeUrl.toLowerCase().includes('.gif');
+            } else {
+                item.imgUrl = this.getPlaceholderImage();
+                item.hasImage = false;
+                item.isGif = false;
+            }
+            this.saveCloudData();
+        },
+
+        // 개별 외부 음원 입력 핸들러
+        updateAudioUrl(item) {
+            if (item.audioUrl) {
+                let safeUrl = this.upgradeHttps(item.audioUrl.trim());
+                item.audioUrl = safeUrl;
+                item.hasAudio = true;
+            } else {
+                item.hasAudio = false;
+            }
+            this.saveCloudData();
+        },
+
+        showToast(msg) {
+            this.toastMessage = msg;
+            if(this.toastTimeout) clearTimeout(this.toastTimeout);
+            this.toastTimeout = setTimeout(() => { this.toastMessage = ''; }, 4000);
+        },
+
+        initDragScroll() {
+            const attach = (el) => {
+                if(!el) return;
+                let isDown = false;
+                let startY, startX, scrollTop, scrollLeft;
+                el.addEventListener('mousedown', (e) => {
+                    const isInteractive = e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT' || e.target.closest('button') || e.target.closest('label') || e.target.closest('.drag-handle') || e.target.type === 'range';
+                    if(isInteractive) return;
+                    
+                    isDown = true;
+                    el.style.cursor = 'grabbing';
+                    startX = e.pageX - el.offsetLeft;
+                    startY = e.pageY - el.offsetTop;
+                    scrollLeft = el.scrollLeft;
+                    scrollTop = el.scrollTop;
+                });
+                el.addEventListener('mouseleave', () => { isDown = false; el.style.cursor = ''; });
+                el.addEventListener('mouseup', () => { isDown = false; el.style.cursor = ''; });
+                el.addEventListener('mousemove', (e) => {
+                    if (!isDown) return;
+                    e.preventDefault();
+                    const x = e.pageX - el.offsetLeft;
+                    const y = e.pageY - el.offsetTop;
+                    el.scrollLeft = scrollLeft - (x - startX);
+                    el.scrollTop = scrollTop - (y - startY);
+                });
+            };
+            setTimeout(() => {
+                if (!this.isViewerMode) attach(this.$refs.leftPanel);
+                if (!this.isViewerMode) attach(this.$refs.rightPanel); 
+            }, 100);
+        },
+
+        async initFirebase() {
+            if (!window.firebaseDeps) {
+                setTimeout(() => this.initFirebase(), 100);
+                return;
+            }
+            try {
+                let firebaseConfig;
+                try { firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null; } catch (e) {}
+
+                if (!firebaseConfig) {
+                    firebaseConfig = {
+                        apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
+                        authDomain: "excel-ec5e4.firebaseapp.com",
+                        projectId: "excel-ec5e4",
+                        storageBucket: "excel-ec5e4.firebasestorage.app",
+                        messagingSenderId: "427552489685",
+                        appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
+                        measurementId: "G-TGR2BVMHD4"
+                    };
+                }
+
+                const app = window.firebaseDeps.initializeApp(firebaseConfig);
+                this.db = window.firebaseDeps.getFirestore(app);
+                this.appId = typeof __app_id !== 'undefined' ? __app_id : 'excel-signature-board';
+
+                const auth = window.firebaseDeps.getAuth(app);
+                
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await window.firebaseDeps.signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await window.firebaseDeps.signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        try { await window.firebaseDeps.signInAnonymously(auth); } catch (err2) {}
+                    }
+                };
+                
+                await initAuth();
+
+                window.firebaseDeps.onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        this.userId = user.uid;
+                        this.loadCloudData(); 
+                    } else {
+                        this.userId = null;
+                    }
+                });
+            } catch(e) {
+                console.error("Firebase 초기화 오류:", e);
+            }
+        },
+
+        loadCloudData() {
+            if (!this.db || !this.userId || this._unsubscribe) return; 
+            
+            const { doc, onSnapshot } = window.firebaseDeps;
+            const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
+
+            this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
+                if (snapshot.exists()) {
+                    this.isSyncing = true;
+                    const data = snapshot.data();
+                    if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
+                    if(data.groups) this.groups = data.groups;
+                    if(data.members) this.members = data.members;
+                    if(data.events) this.events = data.events;
+                    
+                    if(data.itemConfigs) {
+                        data.itemConfigs.forEach(conf => {
+                            const existingItem = this.items.find(i => i.id === conf.id);
+                            if(existingItem) {
+                                Object.assign(existingItem, conf);
+                                if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
+                                else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
+                            } else {
+                                this.items.push({
+                                    ...conf,
+                                    imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
+                                    hasAudio: conf.hasAudio || !!conf.audioUrl,
+                                    hasImage: conf.hasImage || !!conf.mediaUrl,
+                                    isGif: conf.isGif || false,
+                                    originalGifUrl: conf.originalGifUrl || ''
+                                });
+                            }
+                        });
+                        this.items.sort((a, b) => a.id - b.id);
+                    }
+
+                    this.reassignGroups();
+                    setTimeout(() => { this.isSyncing = false; }, 100);
+                }
+            }, (error) => {
+                if (error.code === 'permission-denied') this.showToast("에러: 파이어베이스의 권한이 막혀있습니다.");
+            });
+        },
+
+        saveCloudData() {
+            if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
+            
+            const { doc, setDoc } = window.firebaseDeps;
+            const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
+            
+            const itemConfigs = this.items.map(i => ({
+                id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
+                isFrozen: i.isFrozen, frozenDataUrl: i.frozenDataUrl,
+                audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
+            }));
+
+            setDoc(configDoc, {
+                isDarkMode: this.isDarkMode,
+                groups: JSON.parse(JSON.stringify(this.groups)),
+                members: JSON.parse(JSON.stringify(this.members)),
+                events: JSON.parse(JSON.stringify(this.events)),
+                itemConfigs: itemConfigs
+            }, {merge: true}).catch(e => { this.showToast("저장 실패: 권한을 확인해주세요."); });
+        },
+
+        async exportSettings() {
+            const data = {
+                isDarkMode: this.isDarkMode, groups: this.groups, events: this.events, members: this.members,
+                itemConfigs: this.items.map(i => ({
+                    id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
+                    isFrozen: i.isFrozen, frozenDataUrl: i.frozenDataUrl,
+                    audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
+                }))
+            };
+            const jsonString = JSON.stringify(data, null, 2);
+            const filename = `signature_settings_backup_${this.lastModified}.json`;
+
+            try {
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'JSON Backup', accept: { 'application/json': ['.json'] } }] });
+                    const writable = await handle.createWritable();
+                    await writable.write(jsonString); await writable.close();
+                    this.showToast("설정 백업이 저장되었습니다.");
+                } else {
+                    const blob = new Blob([jsonString], { type: 'application/json' });
+                    this.triggerDownload(URL.createObjectURL(blob), filename);
+                    this.showToast("백업 파일이 다운로드되었습니다.");
+                }
+            } catch (e) {}
+        },
+
+        async exportFrozenImagesZip() {
+            const frozenItems = this.items.filter(i => i.isFrozen && i.frozenDataUrl);
+            if (frozenItems.length === 0) { this.showToast("캡처된 썸네일이 없습니다."); return; }
+            
+            try {
+                const zip = new JSZip();
+                frozenItems.forEach(item => {
+                    const base64Data = item.frozenDataUrl.split(',')[1];
+                    zip.file(`${item.id}_${this.cleanName(item.name)}_캡처.webp`, base64Data, {base64: true});
+                });
+                const content = await zip.generateAsync({type:"blob"});
+                this.triggerDownload(URL.createObjectURL(content), `캡처_썸네일_일괄백업_${this.lastModified}.zip`);
+                this.showToast("ZIP 백업이 완료되었습니다.");
+            } catch(e) { this.showToast("ZIP 파일 생성 오류가 발생했습니다."); }
+        },
+
+        importSettings(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
+                    if(data.groups) this.groups = data.groups;
+                    if(data.events) this.events = data.events;
+                    if(data.members) this.members = data.members;
+                    if(data.itemConfigs) {
+                        data.itemConfigs.forEach(conf => {
+                            const existingItem = this.items.find(i => i.id === conf.id);
+                            if(existingItem) {
+                                Object.assign(existingItem, conf);
+                                if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
+                                else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
+                            } else {
+                                this.items.push({
+                                    ...conf,
+                                    imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
+                                    hasAudio: conf.hasAudio || !!conf.audioUrl,
+                                    hasImage: conf.hasImage || !!conf.mediaUrl,
+                                    isGif: conf.isGif || false,
+                                    originalGifUrl: conf.originalGifUrl || ''
+                                });
+                            }
+                        });
+                        this.items.sort((a, b) => a.id - b.id);
+                    }
+                    this.reassignGroups(); this.saveCloudData();
+                    this.showToast("설정이 성공적으로 복구되었습니다.");
+                } catch(err) { this.showToast("설정 파일을 읽는 중 오류가 발생했습니다."); }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        },
+
+        getPlaceholderImage() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 400; canvas.height = 225;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#1f2937'; ctx.fillRect(0, 0, 400, 225);
+            ctx.fillStyle = '#9ca3af'; ctx.font = 'bold 30px "Pretendard", sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('이미지 준비중', 200, 112);
+            return canvas.toDataURL('image/png');
+        },
+
+        handleFolderUpload(e) {
+            const files = e.target.files;
+            let tempMap = {}; 
+
+            for (let file of files) {
+                const match = file.name.match(/^(\d+)/);
+                if (!match) continue;
+                
+                const numericId = parseInt(match[1], 10);
+                if (!tempMap[numericId]) tempMap[numericId] = { id: numericId, imgUrl: '', audioName: file.name, hasAudio: false, hasImage: false, isGif: false }; 
+
+                if (file.type.startsWith('image/')) {
+                    tempMap[numericId].imgUrl = URL.createObjectURL(file);
+                    tempMap[numericId].hasImage = true;
+                    if (file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif')) tempMap[numericId].isGif = true;
+                } else if (file.type.startsWith('audio/') || file.name.toLowerCase().match(/\.(mp3|wav|ogg|m4a)$/)) {
+                    tempMap[numericId].audioName = file.name.replace(/\.[^/.]+$/, "");
+                    tempMap[numericId].hasAudio = true;
+                    tempMap[numericId].audioUrl = URL.createObjectURL(file); 
+                }
+            }
+
+            for (const id in tempMap) {
+                const existingItem = this.items.find(i => i.id === parseInt(id));
+                const targetGroupId = this.findGroupForId(parseInt(id)); 
+
+                if (existingItem) {
+                    if (tempMap[id].imgUrl) {
+                        if (existingItem.isFrozen && existingItem.frozenDataUrl) {
+                            existingItem.originalGifUrl = tempMap[id].imgUrl;
+                            existingItem.imgUrl = existingItem.frozenDataUrl; 
+                            existingItem.isGif = tempMap[id].isGif;
+                        } else {
+                            existingItem.imgUrl = tempMap[id].imgUrl;
+                            existingItem.isGif = tempMap[id].isGif;
+                            existingItem.isFrozen = false;
+                            existingItem.frozenDataUrl = null;
+                            existingItem.originalGifUrl = '';
+                        }
+                        existingItem.hasImage = true;
+                    }
+                    if (tempMap[id].hasAudio) {
+                        existingItem.name = tempMap[id].audioName;
+                        existingItem.audioUrl = tempMap[id].audioUrl; 
+                        existingItem.hasAudio = true;
+                    }
+                    if (!existingItem.isPersonal && !existingItem.groupId) existingItem.groupId = targetGroupId;
+                } else {
+                    this.items.push({
+                        id: parseInt(id),
+                        name: tempMap[id].hasAudio ? tempMap[id].audioName : `${id}번 시그니처`,
+                        imgUrl: tempMap[id].imgUrl || this.getPlaceholderImage(),
+                        audioUrl: tempMap[id].audioUrl || '',
+                        mediaUrl: '', hasAudio: tempMap[id].hasAudio, hasImage: tempMap[id].hasImage,
+                        isGif: tempMap[id].isGif, isFrozen: false, originalGifUrl: '', frozenDataUrl: null,
+                        isNew: false, isPersonal: false, memberId: '', groupId: targetGroupId
+                    });
+                }
+            }
+            this.items.sort((a, b) => a.id - b.id); e.target.value = '';
+            this.saveCloudData(); this.showToast("폴더 파일이 업로드되었습니다.");
+        },
+
+        autoLinkWebAssets() {
+            if(!this.webAssetBaseUrl.trim()) { this.showToast("폴더 주소를 입력해주세요."); return; }
+            let count = 0; const baseUrl = this.webAssetBaseUrl.trim();
+            
+            this.items.forEach(item => {
+                let updated = false;
+                if(this.webAssetImgExt) {
+                    const url = this.upgradeHttps(`${baseUrl}${item.id}${this.webAssetImgExt}`);
+                    item.mediaUrl = url; item.isGif = this.webAssetImgExt === '.gif'; item.hasImage = true;
+                    if (item.isFrozen && item.frozenDataUrl) item.originalGifUrl = url;
+                    else item.imgUrl = url;
+                    updated = true;
+                }
+                if(this.webAssetAudioExt) {
+                    item.audioUrl = this.upgradeHttps(`${baseUrl}${item.id}${this.webAssetAudioExt}`);
+                    item.hasAudio = true; updated = true;
+                }
+                if(updated) count++;
+            });
+            this.saveCloudData(); this.showToast(`${count}개 항목 매핑 완료!`);
+        },
+
+        importExcelLinks(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+
+                    let updatedCount = 0; let addedCount = 0;
+                    
+                    const findUrlInRow = (row) => {
+                        if (!row) return "";
+                        for (let j = 2; j < row.length; j++) {
+                            const val = String(row[j] || "").trim();
+                            if (val.startsWith("http://") || val.startsWith("https://")) return val;
+                        }
+                        return "";
+                    };
+
+                    for (let i = 2; i < json.length; i += 3) {
+                        const row1 = json[i]; const row2 = json[i+1];
+                        if (!row1 || row1.length === 0) continue;
+
+                        const id = parseInt(row1[0], 10);
+                        if (isNaN(id)) continue;
+
+                        let url1 = findUrlInRow(row1); let url2 = findUrlInRow(row2);
+                        let audioUrl = ""; let mediaUrl = "";
+
+                        [url1, url2].filter(Boolean).forEach(url => {
+                            if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(url)) audioUrl = url;
+                            else if (/\.(gif|png|jpg|jpeg|webp)(\?.*)?$/i.test(url)) mediaUrl = url;
+                            else { if (!audioUrl) audioUrl = url; else if (!mediaUrl) mediaUrl = url; }
+                        });
+
+                        // GitHub Pages 보호 강화: 강제 HTTPS 적용
+                        audioUrl = this.upgradeHttps(audioUrl);
+                        mediaUrl = this.upgradeHttps(mediaUrl);
+
+                        let isNewMark = row1[7] && String(row1[7]).trim() === "NEW";
+                        let itemNameStr = String(row1[1] || `${id}번 시그니처`);
+                        let cleanName = itemNameStr.replace(/^[\d_.\s]+/, '').trim() || `${id}번 시그니처`;
+
+                        let item = this.items.find(x => x.id === id);
+                        if (item) {
+                            let changed = false;
+                            if (audioUrl) { item.audioUrl = audioUrl; item.hasAudio = true; changed = true; }
+                            if (mediaUrl) {
+                                item.mediaUrl = mediaUrl; item.originalGifUrl = mediaUrl; 
+                                if (!item.isFrozen || !item.frozenDataUrl) item.imgUrl = mediaUrl;
+                                item.hasImage = true; item.isGif = mediaUrl.toLowerCase().includes('.gif'); changed = true;
+                            }
+                            if (isNewMark && !item.isNew) { item.isNew = true; changed = true; }
+                            if (changed) updatedCount++;
+                        } else {
+                            this.items.push({
+                                id: id, name: cleanName,
+                                imgUrl: mediaUrl || this.getPlaceholderImage(), audioUrl: audioUrl || '', mediaUrl: mediaUrl || '',
+                                hasAudio: !!audioUrl, hasImage: !!mediaUrl, isGif: mediaUrl ? mediaUrl.toLowerCase().includes('.gif') : false,
+                                isFrozen: false, originalGifUrl: mediaUrl || '', frozenDataUrl: null,
+                                isNew: isNewMark, isPersonal: false, memberId: '', groupId: this.findGroupForId(id)
+                            });
+                            addedCount++;
+                        }
+                    }
+                    if (updatedCount > 0 || addedCount > 0) {
+                        this.items.sort((a, b) => a.id - b.id); this.saveCloudData();
+                        this.showToast(`동기화 완료! (생성: ${addedCount} / 업데이트: ${updatedCount})`);
+                    } else this.showToast("가져올 데이터가 없습니다.");
+                } catch (err) { this.showToast("엑셀 파일 분석 오류가 발생했습니다."); }
+                e.target.value = '';
+            };
+            reader.readAsArrayBuffer(file);
+        },
+
+        playAudio(item) {
+            if(!item.audioUrl) return;
+            const audio = document.getElementById('audio_player_' + item.id);
+            if(audio) {
+                if(audio.paused) { document.querySelectorAll('audio').forEach(a => a.pause()); audio.play(); } 
+                else audio.pause();
+            } else this.showToast("오디오 파일을 찾을 수 없습니다.");
+        },
+
+        findGroupForId(id) { const g = this.groups.find(g => g.start !== null && g.end !== null && id >= g.start && id <= g.end); return g ? g.id : 'g_default'; },
+        reassignGroups() { this.items.forEach(item => { if (!item.isPersonal) item.groupId = this.findGroupForId(item.id); }); },
+        reorderGroups(oldIndex, newIndex) { const moved = this.groups.splice(oldIndex, 1)[0]; this.groups.splice(newIndex, 0, moved); this.saveCloudData(); },
+        
+        addGroup() {
+            if(!this.newGroupName.trim()) return;
+            this.groups.push({ id: 'g_' + Date.now(), name: this.newGroupName.trim(), start: parseInt(this.newGroupStart) || null, end: parseInt(this.newGroupEnd) || null, color: this.newGroupColor });
+            this.reassignGroups(); this.newGroupName = ''; this.newGroupStart = ''; this.newGroupEnd = ''; this.newGroupColor = '#3B82F6'; this.saveCloudData();
+        },
+        startEditGroup(group) { this.editingGroupId = group.id; this.editGroupData = { name: group.name, start: group.start || '', end: group.end || '', color: group.color || '#3B82F6' }; },
+        saveEditGroup(id) {
+            const group = this.groups.find(g => g.id === id);
+            if(group) { group.name = this.editGroupData.name; group.start = parseInt(this.editGroupData.start) || null; group.end = parseInt(this.editGroupData.end) || null; group.color = this.editGroupData.color; this.reassignGroups(); }
+            this.editingGroupId = null; this.saveCloudData();
+        },
+        cancelEditGroup() { this.editingGroupId = null; },
+        removeGroup(id) { if(this.groups.length <= 1) return; this.groups = this.groups.filter(g => g.id !== id); this.reassignGroups(); this.saveCloudData(); },
+        
+        addMember() { if(!this.newMemberName.trim()) return; this.members.push({ id: 'm_' + Date.now(), name: this.newMemberName.trim() }); this.newMemberName = ''; this.saveCloudData(); },
+        reorderMembers(oldIndex, newIndex) { const moved = this.members.splice(oldIndex, 1)[0]; this.members.splice(newIndex, 0, moved); this.saveCloudData(); },
+        removeMember(id) { this.members = this.members.filter(m => m.id !== id); this.items.forEach(item => { if(item.memberId === id) item.memberId = ''; }); this.saveCloudData(); },
+        
+        addEvent() { if(!this.newEventTitle.trim()) return; this.events.push({ id: 'e_' + Date.now(), title: this.newEventTitle.trim(), targets: this.newEventTargets.trim() }); this.newEventTitle = ''; this.newEventTargets = ''; this.saveCloudData(); },
+        removeEvent(id) { this.events = this.events.filter(e => e.id !== id); this.saveCloudData(); },
+
+        getItemsByGroup(groupId) { return this.items.filter(i => i.groupId === groupId && !i.isPersonal); },
+        getEventItems(targetsString) {
+            if(!targetsString) return [];
+            const ids = targetsString.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            return this.items.filter(i => ids.includes(i.id));
+        },
+        getPersonalItemsByMember(memberId) { return this.items.filter(i => i.isPersonal && i.memberId === memberId); },
+        getUnassignedPersonalItems() { return this.items.filter(i => i.isPersonal && !i.memberId); },
+        get newItems() { return this.items.filter(i => i.isNew); },
+
+        get filteredItems() {
+            let result = this.items;
+            if (this.detailFilter !== 'all') {
+                if (this.detailFilter.startsWith('g_')) result = result.filter(i => !i.isPersonal && i.groupId === this.detailFilter.replace('g_', ''));
+                else if (this.detailFilter.startsWith('m_')) {
+                    const mid = this.detailFilter.replace('m_', '');
+                    result = mid === 'unassigned' ? result.filter(i => i.isPersonal && !i.memberId) : result.filter(i => i.isPersonal && i.memberId === mid);
+                }
+                else if (this.detailFilter === 'new') result = result.filter(i => i.isNew);
+            }
+            if (this.searchQuery.trim()) {
+                const query = this.searchQuery.toLowerCase();
+                result = result.filter(item => item.name.toLowerCase().includes(query) || item.id.toString().includes(query));
+            }
+            return result;
+        },
+
+        openGifModal(item) {
+            this.modalItem = item; this.modalOpen = true; this.gifTotalFrames = 0; this.gifCurrentFrame = 0; this.isGifLoading = false; this.isPlaying = false;
+            if(this.gifInterval) clearInterval(this.gifInterval);
+            if (item.isGif && !item.isFrozen) this.$nextTick(() => { this.initSuperGif(); });
+        },
+        async initSuperGif() {
+            if (typeof SuperGif === 'undefined') return;
+            this.isGifLoading = true;
+            const container = document.getElementById('modal_gif_container');
+            let targetUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
+            let objectUrl = null;
+
+            try {
+                const response = await fetch(targetUrl, { cache: "no-store" });
+                if (!response.ok) throw new Error('Network response not ok');
+                const blob = await response.blob();
+                objectUrl = URL.createObjectURL(blob); targetUrl = objectUrl;
+            } catch (e) { console.warn("CORS 우회 fetch 실패", e); }
+            
+            container.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
+            const img = document.getElementById('modal_gif_target');
+            
+            const fallbackTimer = setTimeout(() => {
+                if(this.isGifLoading) {
+                    this.isGifLoading = false; this.showToast('GIF 파일 분석 지연, 기본 모드 전환.');
+                    if(this.gifInstance) this.gifInstance = null;
+                    container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                    if (objectUrl) URL.revokeObjectURL(objectUrl);
+                }
+            }, 20000);
+
+            try {
+                this.gifInstance = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
+                this.gifInstance.load(() => {
+                    clearTimeout(fallbackTimer); this.isGifLoading = false;
+                    const length = this.gifInstance.get_length();
+                    if(length === 0) {
+                        this.showToast('GIF 프레임 분석 불가 규격입니다.');
+                        this.gifInstance = null; container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                        if (objectUrl) URL.revokeObjectURL(objectUrl);
+                        return;
+                    }
+                    this.gifTotalFrames = length; this.gifCurrentFrame = 0; this.isPlaying = true; this.gifInstance.play();
+                    this.gifInterval = setInterval(() => { if(this.isPlaying && this.gifInstance) this.gifCurrentFrame = this.gifInstance.get_current_frame(); }, 50);
+                });
+            } catch (e) {
+                clearTimeout(fallbackTimer); this.isGifLoading = false;
+                container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+            }
+        },
+        closeGifModal() {
+            this.modalOpen = false; this.modalItem = null;
+            if(this.gifInterval) clearInterval(this.gifInterval);
+            if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
+            document.getElementById('modal_gif_container').innerHTML = ''; 
+            this.saveCloudData();
+        },
+        scrubGif() {
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                this.isPlaying = false; this.gifInstance.pause();
+                let targetFrame = parseInt(this.gifCurrentFrame);
+                if(isNaN(targetFrame) || targetFrame < 0) targetFrame = 0;
+                if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
+                try { this.gifInstance.move_to(targetFrame); } catch(e) {}
+            }
+        },
+        togglePlay() {
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                if(this.isPlaying) { this.gifInstance.pause(); this.isPlaying = false; } 
+                else { this.gifInstance.play(); this.isPlaying = true; }
+            }
+        },
+        captureModalFrame() {
+            if (!this.modalItem) return;
+            let canvas;
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                this.gifInstance.pause(); this.isPlaying = false; canvas = this.gifInstance.get_canvas();
+            } else {
+                const imgElement = document.getElementById('modal_img_preview');
+                if(!imgElement) return;
+                canvas = document.createElement('canvas'); canvas.width = imgElement.naturalWidth || imgElement.width; canvas.height = imgElement.naturalHeight || imgElement.height;
+                const ctx = canvas.getContext('2d'); ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+            }
+            const outCanvas = document.createElement('canvas');
+            let width = canvas.width; let height = canvas.height; const MAX_W = 600; 
+            if(width > MAX_W) { height = Math.round(height * (MAX_W / width)); width = MAX_W; }
+            outCanvas.width = width; outCanvas.height = height;
+            outCanvas.getContext('2d').drawImage(canvas, 0, 0, width, height);
+            
+            if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
+            const dataUrl = outCanvas.toDataURL('image/webp', 0.85); 
+            this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
+        },
+        resetModalFrame() {
+            if (!this.modalItem) return;
+            if (this.modalItem.originalGifUrl) this.modalItem.imgUrl = this.modalItem.originalGifUrl;
+            this.modalItem.isFrozen = false; this.modalItem.frozenDataUrl = null;
+            if(this.gifInterval) clearInterval(this.gifInterval);
+            this.$nextTick(() => { this.initSuperGif(); });
+        },
+        downloadCurrentModalFrame() {
+            if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
+            this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.webp`);
+        },
+
+        cleanName(name) { return name.replace(/^[\d_.\s]+/, ''); },
+
+        copyViewerLink() {
+            const url = window.location.origin + window.location.pathname + '?viewer=true';
+            const iframeCode = `<iframe src="${url}" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; min-height: 800px; max-width: 100%;" allowfullscreen></iframe>`;
+            const textArea = document.createElement("textarea"); textArea.value = iframeCode; textArea.style.position = "fixed";
+            document.body.appendChild(textArea); textArea.focus(); textArea.select();
+            try { document.execCommand('copy'); this.showToast('뷰어 태그가 복사되었습니다!'); } catch (err) { this.showToast('복사에 실패했습니다.'); }
+            document.body.removeChild(textArea);
+        },
+
+        async exportExcel() {
+            if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
+            const data = []; const merges = [];
+            data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]); merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
+            data.push(["번호", "시그니처 이름", "구분", "링크", "비고 (개인)", "", "", "NEW 표기"]); merges.push({ s: { r: 1, c: 4 }, e: { r: 1, c: 5 } }); 
+
+            let currentRow = 2; 
+            this.items.forEach(item => {
+                let remarks = [];
+                if (item.isPersonal) {
+                    const member = this.members.find(m => m.id === item.memberId);
+                    remarks.push(member ? `개인 (${member.name})` : "개인");
+                }
+                const newMark = item.isNew ? "NEW" : "";
+                data.push([item.id, `${item.id} ${this.cleanName(item.name)}`, "음원 외부링크", "", remarks.join(", "), "", "", newMark]);
+                data.push(["", "", "이미지 외부링크", "", "", "", "", ""]);
+                data.push(["", "", "", "", "", "", "", ""]);
+
+                merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } }, { s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } }, { s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } }, { s: { r: currentRow, c: 7 }, e: { r: currentRow + 1, c: 7 } });
+                currentRow += 3;
+            });
+
+            const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!merges'] = merges; ws['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 15 }, { wch: 60 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 15 }];
+            for (let cellAddress in ws) {
+                if (cellAddress[0] === '!') continue;
+                const col = cellAddress.replace(/[0-9]/g, ''); const row = parseInt(cellAddress.replace(/\D/g, '')) - 1; 
+                if (!ws[cellAddress].s) ws[cellAddress].s = {};
+                ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11 };
+                if (col === 'A' || col === 'B' || col === 'C') ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
+                if (row === 0) { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 14, bold: true }; }
+                if (col === 'H') { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, color: { rgb: "FF0000" }, bold: true }; }
+            }
+            XLSX.utils.book_append_sheet(wb, ws, "시그니처 목록");
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/octet-stream' });
+            const filename = `시그니처목록_업로드양식_${this.lastModified}.xlsx`;
+            try {
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'Excel File', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob); await writable.close(); this.showToast("저장 완료");
+                } else XLSX.writeFile(wb, filename); 
+            } catch (e) { if (e.name !== 'AbortError') XLSX.writeFile(wb, filename); }
+        },
+
+        async downloadImage() {
+            if (this.items.length === 0) { this.showToast("다운로드할 내용이 없습니다."); return; }
+            this.isDownloading = true;
+
+            let dirHandle = null;
+            if (window.showDirectoryPicker) {
+                try { dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' }); } catch (e) { if (e.name !== 'AbortError') this.isDownloading = false; return; }
+            }
+
+            const board = this.$refs.captureBoard;
+            try {
+                const scale = 2.5; const bgColor = this.isDarkMode ? '#111827' : '#f9fafb';
+                const canvas = await html2canvas(board, { scale: scale, useCORS: true, backgroundColor: bgColor });
+                
+                const items = board.querySelectorAll('.avoid-break');
+                const ranges = Array.from(items).map(el => {
+                    const rect = el.getBoundingClientRect(); const boardRect = board.getBoundingClientRect();
+                    return { top: (rect.top - boardRect.top) * scale, bottom: (rect.bottom - boardRect.top) * scale };
+                });
+
+                const MAX_HEIGHT = 10000; 
+
+                const saveCanvasPart = async (partCanvas, filename) => {
+                    return new Promise(resolve => {
+                        partCanvas.toBlob(async (blob) => {
+                            if (dirHandle) {
+                                try {
+                                    const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+                                    const writable = await fileHandle.createWritable();
+                                    await writable.write(blob); await writable.close();
+                                } catch (e) { this.triggerDownload(URL.createObjectURL(blob), filename); }
+                            } else this.triggerDownload(URL.createObjectURL(blob), filename);
+                            resolve();
+                        }, 'image/webp', 0.85); 
+                    });
+                };
+
+                if (canvas.height <= MAX_HEIGHT) {
+                    await saveCanvasPart(canvas, `시그니처보드_${this.lastModified}.webp`);
+                    this.showToast(dirHandle ? "폴더에 저장되었습니다." : "다운로드 되었습니다.");
+                } else {
+                    let currentY = 0; let partNum = 1;
+                    while (currentY < canvas.height) {
+                        let nextY = currentY + MAX_HEIGHT;
+                        if (nextY < canvas.height) {
+                            let intersectingItem = ranges.find(r => nextY > r.top && nextY < r.bottom);
+                            if (intersectingItem) {
+                                nextY = intersectingItem.top - (15 * scale);
+                                if (nextY <= currentY) nextY = intersectingItem.bottom + (15 * scale);
+                            }
+                        } else nextY = canvas.height;
+
+                        const partHeight = nextY - currentY;
+                        const partCanvas = document.createElement('canvas');
+                        partCanvas.width = canvas.width; partCanvas.height = partHeight;
+                        partCanvas.getContext('2d').drawImage(canvas, 0, currentY, canvas.width, partHeight, 0, 0, canvas.width, partHeight);
+                        await saveCanvasPart(partCanvas, `시그니처보드_${this.lastModified}_part${partNum}.webp`);
+                        currentY = nextY; partNum++;
+                    }
+                    this.showToast(`${partNum - 1}장으로 분할 저장되었습니다.`);
+                }
+            } catch(e) { this.showToast('이미지 생성 오류'); } finally { this.isDownloading = false; }
+        },
+
+        triggerDownload(dataUrl, filename) {
+            const link = document.createElement('a'); link.download = filename; link.href = dataUrl;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        }
+    }));
+});
