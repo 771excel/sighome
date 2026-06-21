@@ -134,8 +134,6 @@
                         return;
                     }
                     try {
-                        // 문제점 1 해결: 주석 처리되어 있던 Firebase 연결 설정을 활성화했습니다.
-                        // 이 정보는 본인의 Firebase 프로젝트 설정으로 교체하셔야 합니다.
                         const firebaseConfig = {
                             apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
                             authDomain: "excel-ec5e4.firebaseapp.com",
@@ -170,8 +168,6 @@
                     if (!this.db) return;
                     const { doc, onSnapshot } = window.firebaseDeps;
                     
-                    // 문제점 2 해결: 기존에는 경로에 유저 ID가 포함되어 새로 접속하면 빈 보드만 보였습니다.
-                    // 모두가(관리자/뷰어) 동일한 문서를 바라보도록 고정된 공통 문서 경로를 사용합니다.
                     const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
 
                     onSnapshot(configDoc, (snapshot) => {
@@ -822,21 +818,24 @@
 
                 cleanName(name) { return name.replace(/^[\d_.\s]+/, ''); },
 
-                // 뷰어 전용 모드 링크 복사
+                // 뷰어 전용 모드 링크 복사 (HTML iframe 태그 발급)
                 copyViewerLink() {
                     const url = window.location.origin + window.location.pathname + '?viewer=true';
+                    // 게시판 등에 바로 붙여넣을 수 있는 iframe 태그 생성
+                    const iframeCode = `<iframe src="${url}" width="100%" height="800" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" allowfullscreen></iframe>`;
+                    
                     const textArea = document.createElement("textarea");
-                    textArea.value = url;
+                    textArea.value = iframeCode;
                     textArea.style.position = "fixed";
                     document.body.appendChild(textArea);
                     textArea.focus();
                     textArea.select();
                     try {
                         document.execCommand('copy');
-                        alert('뷰어 전용 링크가 복사되었습니다!\n게시판이나 HTML 연동에 이 링크를 붙여넣으세요.\n\n복사된 링크: ' + url);
+                        alert('뷰어 전용 HTML 태그(iframe)가 복사되었습니다!\n게시글 작성 시 HTML 모드에서 붙여넣기 하시면 바로 뷰어가 나타납니다.\n\n복사된 태그:\n' + iframeCode);
                     } catch (err) {
                         console.error('Fallback: Oops, unable to copy', err);
-                        alert('링크 복사에 실패했습니다. 아래 주소를 수동으로 복사해주세요:\n' + url);
+                        alert('태그 복사에 실패했습니다. 아래 코드를 수동으로 복사해주세요:\n' + iframeCode);
                     }
                     document.body.removeChild(textArea);
                 },
@@ -1143,7 +1142,7 @@
                             <i class="ph ph-file-xls"></i> [방법3] 엑셀 외부링크 일괄 등록
                         </h2>
                         <p class="text-xs text-emerald-700 mb-3 leading-relaxed">
-                            다운로드한 <b>엑셀 파일의 D열(링크)</b>에 호스팅해 둔 이미지나 음원의 URL을 적어 넣고 업로드하시면, 시그니처 보드에 외부링크가 1초만에 일괄 등록됩니다. 서버 부하를 획기적으로 줄일 수 있습니다.
+                            다운로드한 <b>엑셀 파일의 D열(링크)</b>에 호스팅해 둔 이미지나 음원의 URL을 적어 넣고 업로드하시면, 시그니처 보드에 외부링크가 1초만에 일괄 등록됩니다. 서버 부하를 획기적으로 줄일 수 구 있습니다.
                         </p>
                         <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm">
                             <input type="file" accept=".xlsx, .xls, .csv" @change="importExcelLinks" class="hidden">
