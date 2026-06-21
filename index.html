@@ -81,7 +81,7 @@
             <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 shrink-0">
                 <i class="ph ph-download-simple" x-show="!isDownloading"></i>
                 <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
-                <span x-text="isDownloading ? '캡처 중...' : '이미지 캡처'"></span>
+                <span x-text="isDownloading ? 'PNG 캡처 중...' : '이미지 캡처'"></span>
             </button>
         </div>
     </header>
@@ -320,9 +320,12 @@
                     <template x-for="item in filteredItems" :key="item.id">
                         <div class="border rounded-lg p-4 bg-white shadow-sm flex flex-col gap-3 relative transition-all" :class="item.isNew ? 'border-yellow-400 bg-yellow-50' : ''">
                             
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm font-black text-gray-800" x-text="`${item.id} ${cleanName(item.name)}`"></span>
-                                <div class="flex gap-4 text-xs font-bold">
+                            <div class="flex justify-between items-center gap-4">
+                                <div class="flex items-center gap-2 flex-1">
+                                    <span class="text-sm font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded shrink-0 border border-blue-200" x-text="item.id"></span>
+                                    <input type="text" x-model="item.name" @change="saveCloudData()" class="text-sm font-bold text-gray-800 border-b border-gray-300 hover:border-blue-500 focus:border-blue-500 focus:outline-none bg-transparent w-full py-0.5 transition-colors placeholder-gray-400" placeholder="시그니처 이름 입력">
+                                </div>
+                                <div class="flex gap-4 text-xs font-bold shrink-0">
                                     <label class="flex items-center gap-1.5 cursor-pointer">
                                         <input type="checkbox" x-model="item.isPersonal" class="accent-blue-600 w-4 h-4" @change="saveCloudData()">
                                         <span :class="item.isPersonal ? 'text-blue-600' : 'text-gray-400'">개인시그</span>
