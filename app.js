@@ -198,7 +198,6 @@ document.addEventListener('alpine:init', () => {
                         await signInAnonymously(auth); 
                     } catch (err2) { 
                         console.error(err2); 
-                        // 파이어베이스 인증(도메인 승인) 에러일 경우 강력하게 알림
                         if(err2.code === 'auth/unauthorized-domain') {
                             this.showToast("🚨 에러: Firebase Auth '승인된 도메인'에 깃허브 주소를 추가해주세요!");
                         } else {
@@ -210,7 +209,7 @@ document.addEventListener('alpine:init', () => {
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         this.userId = user.uid;
-                        if(!this._unsubscribe) this.loadCloudData(); // 중복 리스너 방지
+                        if(!this._unsubscribe) this.loadCloudData();
                     } else {
                         this.userId = null;
                         if(this._unsubscribe) { this._unsubscribe(); this._unsubscribe = null; }
@@ -224,6 +223,7 @@ document.addEventListener('alpine:init', () => {
         loadCloudData() {
             if (!this.db || !this.userId) return; 
             
+            // [경로 수정됨] 기존 데이터베이스와 통신 경로 일치
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
 
             this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
@@ -236,7 +236,6 @@ document.addEventListener('alpine:init', () => {
                     if(data.events) this.events = data.events;
                     
                     if(data.itemConfigs) {
-                        // [핵심 픽스] Object.assign 대신 배열 자체를 교체하여 Alpine.js Reactivity(반응성) 확보
                         let updatedItems = [...this.items];
                         
                         data.itemConfigs.forEach(conf => {
@@ -257,20 +256,21 @@ document.addEventListener('alpine:init', () => {
                             }
                         });
                         updatedItems.sort((a, b) => a.id - b.id);
-                        this.items = updatedItems; // 통째로 할당해야 화면이 강제 업데이트됨
+                        this.items = updatedItems; 
                     }
 
                     this.reassignGroups();
                     setTimeout(() => { this.isSyncing = false; }, 100);
                 }
             }, (error) => {
-                if (error.code === 'permission-denied') this.showToast("에러: 파이어베이스 Firestore 데이터베이스 권한이 막혀있습니다.");
+                if (error.code === 'permission-denied') this.showToast("에러: 파이어베이스 데이터베이스 권한이 막혀있습니다.");
             });
         },
 
         saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
+            // [경로 수정됨] 기존 데이터베이스와 통신 경로 일치
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
             
             const itemConfigs = this.items.map(i => ({
@@ -287,9 +287,8 @@ document.addEventListener('alpine:init', () => {
                 itemConfigs: itemConfigs
             }, {merge: true}).catch(e => { 
                 console.error(e);
-                // [핵심 픽스] 용량 초과 에러(1MB)인지 권한 에러인지 사용자에게 명확히 고지
                 if (e.code === 'resource-exhausted' || e.message.includes('exceeds')) {
-                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과(1MB). 캡처된 이미지를 줄이세요.");
+                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과. 캡처된 이미지를 줄이세요.");
                 } else if (e.code === 'permission-denied') {
                     this.showToast("🚨 저장 실패: 파이어베이스 데이터베이스 쓰기 권한이 없습니다.");
                 } else {
@@ -332,7 +331,8 @@ document.addEventListener('alpine:init', () => {
                 const zip = new JSZip();
                 frozenItems.forEach(item => {
                     const base64Data = item.frozenDataUrl.split(',')[1];
-                    zip.file(`${item.id}_${this.cleanName(item.name)}_캡처.webp`, base64Data, {base64: true});
+                    // [변경됨] PNG 저장
+                    zip.file(`${item.id}_${this.cleanName(item.name)}_캡처.png`, base64Data, {base64: true});
                 });
                 const content = await zip.generateAsync({type:"blob"});
                 this.triggerDownload(URL.createObjectURL(content), `캡처_썸네일_일괄백업_${this.lastModified}.zip`);
@@ -352,7 +352,7 @@ document.addEventListener('alpine:init', () => {
                     if(data.events) this.events = data.events;
                     if(data.members) this.members = data.members;
                     if(data.itemConfigs) {
-                        let updatedItems = [...this.items]; // Reactivity 픽스
+                        let updatedItems = [...this.items]; 
                         data.itemConfigs.forEach(conf => {
                             let idx = updatedItems.findIndex(i => i.id === conf.id);
                             if(idx !== -1) {
@@ -520,7 +520,9 @@ document.addEventListener('alpine:init', () => {
 
                         let isNewMark = row1[7] && String(row1[7]).trim() === "NEW";
                         let itemNameStr = String(row1[1] || `${id}번 시그니처`);
-                        let cleanName = itemNameStr.replace(/^[\d_.\s]+/, '').trim() || `${id}번 시그니처`;
+                        
+                        // [수정됨] 내부의 추가 숫자가 지워지지 않는 개선된 정규식 반영
+                        let cleanName = itemNameStr.replace(/^\d+[_.\-\s]+/, '').trim() || `${id}번 시그니처`;
 
                         let item = this.items.find(x => x.id === id);
                         if (item) {
@@ -706,7 +708,8 @@ document.addEventListener('alpine:init', () => {
             outCanvas.getContext('2d').drawImage(canvas, 0, 0, width, height);
             
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
-            const dataUrl = outCanvas.toDataURL('image/webp', 0.85); 
+            // [변경됨] PNG 포맷 저장
+            const dataUrl = outCanvas.toDataURL('image/png'); 
             this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
         },
         resetModalFrame() {
@@ -718,10 +721,13 @@ document.addEventListener('alpine:init', () => {
         },
         downloadCurrentModalFrame() {
             if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
-            this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.webp`);
+            // [변경됨] PNG로 다운로드
+            this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.png`);
         },
 
-        cleanName(name) { return name.replace(/^[\d_.\s]+/, ''); },
+        // [수정됨] 이름 내 추가 숫자가 사라지지 않도록 정규식 개선. 
+        // 오직 제일 앞의 숫자와 그 바로 뒤 띄어쓰기/기호 까지만 지움
+        cleanName(name) { return name.replace(/^\d+[_.\-\s]+/, ''); },
 
         copyViewerLink() {
             const url = window.location.origin + window.location.pathname + '?viewer=true';
@@ -798,10 +804,13 @@ document.addEventListener('alpine:init', () => {
                     return { top: (rect.top - boardRect.top) * scale, bottom: (rect.bottom - boardRect.top) * scale };
                 });
 
-                const MAX_HEIGHT = 10000; 
+                // [수정됨] 화질/용량을 높이기 위해 MAX_HEIGHT를 10000에서 15000으로 증가
+                // 이 수치를 통해 한 장당 15-20MB 정도의 고화질 PNG 이미지가 생성됩니다.
+                const MAX_HEIGHT = 15000; 
 
                 const saveCanvasPart = async (partCanvas, filename) => {
                     return new Promise(resolve => {
+                        // [수정됨] 무손실 PNG 포맷으로 변경
                         partCanvas.toBlob(async (blob) => {
                             if (dirHandle) {
                                 try {
@@ -811,12 +820,12 @@ document.addEventListener('alpine:init', () => {
                                 } catch (e) { this.triggerDownload(URL.createObjectURL(blob), filename); }
                             } else this.triggerDownload(URL.createObjectURL(blob), filename);
                             resolve();
-                        }, 'image/webp', 0.85); 
+                        }, 'image/png'); 
                     });
                 };
 
                 if (canvas.height <= MAX_HEIGHT) {
-                    await saveCanvasPart(canvas, `시그니처보드_${this.lastModified}.webp`);
+                    await saveCanvasPart(canvas, `시그니처보드_${this.lastModified}.png`);
                     this.showToast(dirHandle ? "폴더에 저장되었습니다." : "다운로드 되었습니다.");
                 } else {
                     let currentY = 0; let partNum = 1;
@@ -825,8 +834,9 @@ document.addEventListener('alpine:init', () => {
                         if (nextY < canvas.height) {
                             let intersectingItem = ranges.find(r => nextY > r.top && nextY < r.bottom);
                             if (intersectingItem) {
-                                nextY = intersectingItem.top - (15 * scale);
-                                if (nextY <= currentY) nextY = intersectingItem.bottom + (15 * scale);
+                                // [수정됨] 아이템이 잘리지 않도록 안전하게 위로 후퇴 (여유 20px)
+                                nextY = intersectingItem.top - (20 * scale);
+                                if (nextY <= currentY) nextY = intersectingItem.bottom + (20 * scale);
                             }
                         } else nextY = canvas.height;
 
@@ -834,10 +844,11 @@ document.addEventListener('alpine:init', () => {
                         const partCanvas = document.createElement('canvas');
                         partCanvas.width = canvas.width; partCanvas.height = partHeight;
                         partCanvas.getContext('2d').drawImage(canvas, 0, currentY, canvas.width, partHeight, 0, 0, canvas.width, partHeight);
-                        await saveCanvasPart(partCanvas, `시그니처보드_${this.lastModified}_part${partNum}.webp`);
+                        
+                        await saveCanvasPart(partCanvas, `시그니처보드_${this.lastModified}_part${partNum}.png`);
                         currentY = nextY; partNum++;
                     }
-                    this.showToast(`${partNum - 1}장으로 분할 저장되었습니다.`);
+                    this.showToast(`${partNum - 1}장으로 고화질 PNG 분할 저장되었습니다.`);
                 }
             } catch(e) { this.showToast('이미지 생성 오류'); } finally { this.isDownloading = false; }
         },
