@@ -161,11 +161,11 @@
                     };
                     setTimeout(() => {
                         if (!this.isViewerMode) attach(this.$refs.leftPanel);
-                        if (!this.isViewerMode) attach(this.$refs.rightPanel); // 뷰어 모드일때는 네이티브 스크롤 방해 방지
+                        if (!this.isViewerMode) attach(this.$refs.rightPanel); 
                     }, 100);
                 },
 
-                // 1. Firebase 클라우드 초기화 (권한 오류 해결 버전)
+                // 1. Firebase 클라우드 초기화 (권한 오류 완벽 해결 버전)
                 async initFirebase() {
                     if (!window.firebaseDeps) {
                         setTimeout(() => this.initFirebase(), 100);
@@ -174,11 +174,9 @@
                     try {
                         let firebaseConfig;
                         try {
-                            // 실행 환경에서 주입되는 설정 우선
                             firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
                         } catch (e) {}
 
-                        // 기본 폴백 설정 (외부 호스팅 시 사용됨)
                         if (!firebaseConfig) {
                             firebaseConfig = {
                                 apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
@@ -197,28 +195,37 @@
 
                         const auth = window.firebaseDeps.getAuth(app);
                         
-                        // [권한 오류 핵심 해결]
-                        // 로그인 상태 감지 리스너 등록 후 (이전에는 로그인 전에 호출하여 에러 발생)
+                        // [권한 오류 해결 핵심]: 반드시 Auth부터 완전히 마무리 후 데이터를 불러옵니다.
+                        const initAuth = async () => {
+                            try {
+                                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                    await window.firebaseDeps.signInWithCustomToken(auth, __initial_auth_token);
+                                } else {
+                                    await window.firebaseDeps.signInAnonymously(auth);
+                                }
+                            } catch (err) {
+                                console.warn("인증 실패, 우회 시도:", err);
+                                try {
+                                    await window.firebaseDeps.signInAnonymously(auth);
+                                } catch (err2) {
+                                    console.error("익명 로그인도 실패:", err2);
+                                }
+                            }
+                        };
+                        
+                        // 인증이 될 때까지 기다림
+                        await initAuth();
+
+                        // 인증 완료 후 상태 변화 리스너 장착 및 데이터 로드
                         window.firebaseDeps.onAuthStateChanged(auth, (user) => {
                             if (user) {
                                 this.userId = user.uid;
-                                // 로그인이 완전히 확인된 후에만 데이터를 불러옵니다.
                                 this.loadCloudData(); 
                             } else {
                                 this.userId = null;
                             }
                         });
 
-                        // 인증 초기화 로직 (우회 처리 방지, 엄격하게 대기)
-                        try {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await window.firebaseDeps.signInWithCustomToken(auth, __initial_auth_token);
-                            } else {
-                                await window.firebaseDeps.signInAnonymously(auth);
-                            }
-                        } catch (authError) {
-                            console.warn("인증 실패 (브라우저 정책 등):", authError);
-                        }
                     } catch(e) {
                         console.error("Firebase 초기화 오류:", e);
                     }
@@ -226,12 +233,12 @@
 
                 // 2. 클라우드에서 데이터 불러오기 (실시간 동기화)
                 loadCloudData() {
-                    // userId가 없으면 실행 방지 (권한 오류 원천 차단)
+                    // userId 확인 필수 (비인증 상태 접근 완벽 차단)
                     if (!this.db || !this.userId || this._unsubscribe) return; 
                     
                     const { doc, onSnapshot } = window.firebaseDeps;
                     
-                    // 공식 규칙에 맞는 공통된 퍼블릭 경로 구성
+                    // 공식 규칙에 맞게 경로 재구성 (public/data 하위)
                     const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'boards', 'main_board');
 
                     this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
@@ -269,13 +276,16 @@
                             setTimeout(() => { this.isSyncing = false; }, 100);
                         }
                     }, (error) => {
-                        console.error("Firestore 동기화 권한 오류:", error);
+                        console.error("Firestore 동기화 권한 에러:", error);
+                        if (error.code === 'permission-denied') {
+                            this.showToast("에러: 파이어베이스의 읽기/쓰기 권한이 막혀있습니다.");
+                        }
                     });
                 },
 
                 // 3. 클라우드에 데이터 저장
                 saveCloudData() {
-                    // userId가 없거나 뷰어 모드일 시 덮어쓰기 방지
+                    // 저장 시에도 유저 권한 확인 필수
                     if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
                     
                     const { doc, setDoc } = window.firebaseDeps;
@@ -293,7 +303,10 @@
                         members: JSON.parse(JSON.stringify(this.members)),
                         events: JSON.parse(JSON.stringify(this.events)),
                         itemConfigs: itemConfigs
-                    }, {merge: true}).catch(e => console.error(e));
+                    }, {merge: true}).catch(e => {
+                        console.error("저장 권한 에러:", e);
+                        this.showToast("저장 실패: 파이어베이스 권한을 확인해주세요.");
+                    });
                 },
 
                 async exportSettings() {
@@ -1115,53 +1128,53 @@
       x-data="signatureApp()" x-cloak>
     
     <!-- 상단 네비게이션바 -->
-    <header class="bg-white shadow-sm py-4 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b flex-wrap gap-2">
-        <div class="flex items-center gap-4">
+    <header class="bg-white shadow-sm h-auto sm:h-20 py-2 sm:py-0 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b flex-wrap gap-2">
+        <div class="flex items-center gap-3 sm:gap-4">
             <div class="flex items-center gap-2">
-                <!-- 로고 적용 (크기 4배 확대, h-32 = 128px) -->
-                <img src="logo.png" alt="771 Logo" class="h-32 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                <i class="ph-fill ph-magic-wand text-blue-600 text-6xl" style="display: none;"></i>
+                <!-- 로고 적용 (크기 절반으로 축소) -->
+                <img src="logo.png" alt="771 Logo" class="h-12 sm:h-16 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <i class="ph-fill ph-magic-wand text-blue-600 text-4xl sm:text-5xl" style="display: none;"></i>
                 
-                <h1 class="font-bold text-xl ml-2">771 시그니처 뷰어</h1>
+                <h1 class="font-black text-lg sm:text-xl ml-1">771 시그니처 뷰어</h1>
                 <!-- 클라우드 동기화 상태 표시기 복구 -->
-                <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-2 mt-1 hidden sm:inline-block" x-show="isSyncing">클라우드 동기화 됨</span>
+                <span class="text-[10px] sm:text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-1 hidden sm:inline-block border border-green-200" x-show="isSyncing">클라우드 동기화 됨</span>
                 
                 <!-- 뷰어 링크 복사 버튼 (관리자에게만 보임) -->
-                <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-2 mt-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-sm" title="HTML이나 게시글에 공유할 링크 발급">
-                    <i class="ph ph-link text-sm"></i> 뷰어 링크 발급
+                <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-1 sm:ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-sm" title="HTML이나 게시글에 공유할 링크 발급">
+                    <i class="ph ph-link text-sm"></i> <span class="hidden sm:inline">뷰어 링크 발급</span><span class="sm:hidden">링크</span>
                 </button>
             </div>
             <!-- 다크모드 / 라이트모드 토글 버튼 -->
-            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-4 text-gray-600 shrink-0" title="테마 변경">
-                <i class="ph-fill ph-moon text-xl" x-show="!isDarkMode"></i>
-                <i class="ph-fill ph-sun text-xl" x-show="isDarkMode" style="display: none;"></i>
+            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-1 sm:ml-2 text-gray-600 shrink-0" title="테마 변경">
+                <i class="ph-fill ph-moon text-lg sm:text-xl" x-show="!isDarkMode"></i>
+                <i class="ph-fill ph-sun text-lg sm:text-xl" x-show="isDarkMode" style="display: none;"></i>
             </button>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 sm:gap-3">
             
             <!-- 뷰어 줌 컨트롤러 -->
-            <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 mr-2 shadow-sm border border-gray-200" title="화면 확대/축소">
-                <button @click="zoomOut()" class="w-8 h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
-                    <i class="ph ph-minus font-bold text-lg"></i>
+            <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 mr-1 sm:mr-2 shadow-sm border border-gray-200" title="화면 확대/축소">
+                <button @click="zoomOut()" class="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
+                    <i class="ph ph-minus font-bold text-base sm:text-lg"></i>
                 </button>
-                <span class="text-sm font-bold w-14 text-center text-gray-700" x-text="['50%', '75%', '100%', '125%', '150%'][zoomLevel - 1]"></span>
-                <button @click="zoomIn()" class="w-8 h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel >= 5">
-                    <i class="ph ph-plus font-bold text-lg"></i>
+                <span class="text-xs sm:text-sm font-bold w-10 sm:w-14 text-center text-gray-700" x-text="['50%', '75%', '100%', '125%', '150%'][zoomLevel - 1]"></span>
+                <button @click="zoomIn()" class="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel >= 5">
+                    <i class="ph ph-plus font-bold text-base sm:text-lg"></i>
                 </button>
             </div>
 
             <!-- 뷰어 모드 전용 보드 내 검색창 -->
-            <div x-show="isViewerMode" class="relative mr-4 hidden sm:block">
+            <div x-show="isViewerMode" class="relative mr-2 sm:mr-4 hidden sm:block">
                 <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="border border-gray-300 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-blue-500 w-40 sm:w-56 bg-gray-50 transition-all focus:w-72 shadow-sm">
+                <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="border border-gray-300 rounded-full pl-10 pr-4 py-1.5 sm:py-2 text-sm focus:outline-blue-500 w-40 sm:w-56 bg-gray-50 transition-all focus:w-72 shadow-sm">
             </div>
 
             <button x-show="!isViewerMode" @click="exportExcel()"
-                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors shadow-sm hidden sm:flex">
+                    class="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm hidden sm:flex">
                 <i class="ph ph-file-xls"></i> 엑셀 업로드 양식
             </button>
             <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-semibold flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50">
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm disabled:opacity-50">
                 <i class="ph ph-download-simple" x-show="!isDownloading"></i>
                 <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
                 <span x-text="isDownloading ? '고화질 캡처 중...' : '이미지 캡처'"></span>
