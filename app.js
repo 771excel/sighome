@@ -223,7 +223,6 @@ document.addEventListener('alpine:init', () => {
         loadCloudData() {
             if (!this.db || !this.userId) return; 
             
-            // [경로 수정됨] 기존 데이터베이스와 통신 경로 일치
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
 
             this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
@@ -267,10 +266,49 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        saveCloudData() {
+        // [핵심 픽스] 용량이 너무 큰 이미지 데이터를 저장 직전에 압축해주는 헬퍼 함수 (1MB 에러 완벽 차단)
+        compressDataUrl(dataUrl) {
+            return new Promise(resolve => {
+                if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
+                // 이미 용량이 작으면 패스
+                if(dataUrl.length < 80000) return resolve(dataUrl); 
+
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    // 0.75 퀄리티의 WebP로 압축 (용량을 1/10 수준으로 줄임)
+                    resolve(canvas.toDataURL('image/webp', 0.75));
+                };
+                img.onerror = () => resolve(dataUrl); // 로드 실패시 원본 반환
+                img.src = dataUrl;
+            });
+        },
+
+        async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
-            // [경로 수정됨] 기존 데이터베이스와 통신 경로 일치
+            // 데이터베이스 저장 전, 용량이 과도하게 큰 썸네일(PNG 등)이 있으면 WebP로 자동 압축
+            let needsCompression = false;
+            for (let i of this.items) {
+                if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 100000) {
+                    needsCompression = true; break;
+                }
+            }
+
+            if (needsCompression) {
+                this.showToast("☁️ 데이터베이스 용량 최적화 중...");
+                for (let i of this.items) {
+                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 100000) {
+                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl);
+                        if (i.imgUrl && i.imgUrl.length > 100000) i.imgUrl = i.frozenDataUrl;
+                    }
+                }
+            }
+
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
             
             const itemConfigs = this.items.map(i => ({
@@ -278,6 +316,13 @@ document.addEventListener('alpine:init', () => {
                 isFrozen: i.isFrozen, frozenDataUrl: i.frozenDataUrl,
                 audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
             }));
+
+            // 저장 직전 1MB 초과 여부 최종 안전 체크
+            const payloadStr = JSON.stringify(itemConfigs);
+            if (payloadStr.length > 950000) {
+                this.showToast("🚨 에러: 압축 후에도 데이터가 너무 큽니다. 고정된 썸네일 개수를 줄여주세요!");
+                return;
+            }
 
             setDoc(configDoc, {
                 isDarkMode: this.isDarkMode,
@@ -288,7 +333,7 @@ document.addEventListener('alpine:init', () => {
             }, {merge: true}).catch(e => { 
                 console.error(e);
                 if (e.code === 'resource-exhausted' || e.message.includes('exceeds')) {
-                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과. 캡처된 이미지를 줄이세요.");
+                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과(1MB). 캡처된 이미지를 줄이세요.");
                 } else if (e.code === 'permission-denied') {
                     this.showToast("🚨 저장 실패: 파이어베이스 데이터베이스 쓰기 권한이 없습니다.");
                 } else {
@@ -331,7 +376,6 @@ document.addEventListener('alpine:init', () => {
                 const zip = new JSZip();
                 frozenItems.forEach(item => {
                     const base64Data = item.frozenDataUrl.split(',')[1];
-                    // [변경됨] PNG 저장
                     zip.file(`${item.id}_${this.cleanName(item.name)}_캡처.png`, base64Data, {base64: true});
                 });
                 const content = await zip.generateAsync({type:"blob"});
@@ -340,20 +384,30 @@ document.addEventListener('alpine:init', () => {
             } catch(e) { this.showToast("ZIP 파일 생성 오류가 발생했습니다."); }
         },
 
+        // [핵심 픽스] 이전에 무거운 PNG로 저장된 백업 파일을 불러올 때, 
+        // 1MB 에러 방지를 위해 실시간으로 가볍게 압축하면서 배열에 넣도록 수정되었습니다.
         importSettings(e) {
             const file = e.target.files[0];
             if(!file) return;
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => { // 비동기(async) 처리로 변경
                 try {
                     const data = JSON.parse(event.target.result);
                     if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
                     if(data.groups) this.groups = data.groups;
                     if(data.events) this.events = data.events;
                     if(data.members) this.members = data.members;
+                    
                     if(data.itemConfigs) {
+                        this.showToast("데이터를 분석하고 최적화하는 중입니다...");
                         let updatedItems = [...this.items]; 
-                        data.itemConfigs.forEach(conf => {
+                        
+                        for (let conf of data.itemConfigs) {
+                            // PNG 등 과도하게 무거운 썸네일을 WebP로 즉시 변환 복구
+                            if (conf.isFrozen && conf.frozenDataUrl && conf.frozenDataUrl.length > 100000) {
+                                conf.frozenDataUrl = await this.compressDataUrl(conf.frozenDataUrl);
+                            }
+
                             let idx = updatedItems.findIndex(i => i.id === conf.id);
                             if(idx !== -1) {
                                 updatedItems[idx] = { ...updatedItems[idx], ...conf };
@@ -369,13 +423,16 @@ document.addEventListener('alpine:init', () => {
                                     originalGifUrl: conf.originalGifUrl || ''
                                 });
                             }
-                        });
+                        }
                         updatedItems.sort((a, b) => a.id - b.id);
                         this.items = updatedItems;
                     }
-                    this.reassignGroups(); this.saveCloudData();
-                    this.showToast("설정이 성공적으로 복구되었습니다.");
-                } catch(err) { this.showToast("설정 파일을 읽는 중 오류가 발생했습니다."); }
+                    this.reassignGroups(); 
+                    await this.saveCloudData(); // 완료될때까지 안전하게 대기
+                    this.showToast("설정이 성공적으로 복구 및 최적화되었습니다.");
+                } catch(err) { 
+                    this.showToast("설정 파일을 읽는 중 오류가 발생했습니다."); 
+                }
             };
             reader.readAsText(file);
             e.target.value = '';
@@ -521,7 +578,6 @@ document.addEventListener('alpine:init', () => {
                         let isNewMark = row1[7] && String(row1[7]).trim() === "NEW";
                         let itemNameStr = String(row1[1] || `${id}번 시그니처`);
                         
-                        // [수정됨] 내부의 추가 숫자가 지워지지 않는 개선된 정규식 반영
                         let cleanName = itemNameStr.replace(/^\d+[_.\-\s]+/, '').trim() || `${id}번 시그니처`;
 
                         let item = this.items.find(x => x.id === id);
@@ -708,9 +764,12 @@ document.addEventListener('alpine:init', () => {
             outCanvas.getContext('2d').drawImage(canvas, 0, 0, width, height);
             
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
-            // [변경됨] PNG 포맷 저장
-            const dataUrl = outCanvas.toDataURL('image/png'); 
+            
+            // [원복됨] 개별 썸네일 고정 데이터는 파이어베이스 1MB 에러를 막기위해 다시 가벼운 WebP로 저장합니다. 
+            // 다운로드되는 전체 이미지만 고해상도 PNG를 사용합니다.
+            const dataUrl = outCanvas.toDataURL('image/webp', 0.8); 
             this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
+            this.saveCloudData(); // 즉시 클라우드에 반영 (압축되었으므로 안전)
         },
         resetModalFrame() {
             if (!this.modalItem) return;
@@ -721,12 +780,9 @@ document.addEventListener('alpine:init', () => {
         },
         downloadCurrentModalFrame() {
             if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
-            // [변경됨] PNG로 다운로드
             this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.png`);
         },
 
-        // [수정됨] 이름 내 추가 숫자가 사라지지 않도록 정규식 개선. 
-        // 오직 제일 앞의 숫자와 그 바로 뒤 띄어쓰기/기호 까지만 지움
         cleanName(name) { return name.replace(/^\d+[_.\-\s]+/, ''); },
 
         copyViewerLink() {
@@ -804,13 +860,10 @@ document.addEventListener('alpine:init', () => {
                     return { top: (rect.top - boardRect.top) * scale, bottom: (rect.bottom - boardRect.top) * scale };
                 });
 
-                // [수정됨] 화질/용량을 높이기 위해 MAX_HEIGHT를 10000에서 15000으로 증가
-                // 이 수치를 통해 한 장당 15-20MB 정도의 고화질 PNG 이미지가 생성됩니다.
                 const MAX_HEIGHT = 15000; 
 
                 const saveCanvasPart = async (partCanvas, filename) => {
                     return new Promise(resolve => {
-                        // [수정됨] 무손실 PNG 포맷으로 변경
                         partCanvas.toBlob(async (blob) => {
                             if (dirHandle) {
                                 try {
@@ -834,7 +887,6 @@ document.addEventListener('alpine:init', () => {
                         if (nextY < canvas.height) {
                             let intersectingItem = ranges.find(r => nextY > r.top && nextY < r.bottom);
                             if (intersectingItem) {
-                                // [수정됨] 아이템이 잘리지 않도록 안전하게 위로 후퇴 (여유 20px)
                                 nextY = intersectingItem.top - (20 * scale);
                                 if (nextY <= currentY) nextY = intersectingItem.bottom + (20 * scale);
                             }
