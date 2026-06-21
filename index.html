@@ -20,25 +20,12 @@
     <!-- JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
-    <!-- Firebase Cloud Storage -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        window.firebaseDeps = { initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot };
-    </script>
-
     <script>
         window.signatureApp = function() {
             return {
                 lastModified: '',
                 isDownloading: false,
                 activeTab: 'basic', 
-                
-                userId: null,
-                appId: null,
-                db: null,
-                isSyncing: false,
                 
                 isDarkMode: true,
                 isViewerMode: false,
@@ -91,7 +78,9 @@
                     }
 
                     this.initDragScroll(); 
-                    this.initFirebase();   
+                    
+                    // 브라우저 로컬 저장소에서 데이터 불러오기
+                    this.loadLocalData();
                 },
 
                 initDragScroll() {
@@ -127,62 +116,35 @@
                     }, 100);
                 },
 
-                async initFirebase() {
-                    if (!window.firebaseDeps) {
-                        setTimeout(() => this.initFirebase(), 100);
-                        return;
-                    }
+                // 브라우저 로컬 스토리지에 데이터를 저장하는 함수
+                saveData() {
+                    const itemConfigs = this.items.map(i => ({
+                        id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
+                        isFrozen: i.isFrozen, frozenDataUrl: i.frozenDataUrl,
+                        audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
+                    }));
+
+                    const dataToSave = {
+                        isDarkMode: this.isDarkMode,
+                        groups: this.groups,
+                        members: this.members,
+                        events: this.events,
+                        itemConfigs: itemConfigs
+                    };
+
                     try {
-                        const myFirebaseConfig = {
-                            // apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
-                            // authDomain: "excel-ec5e4.firebaseapp.com",
-                            // projectId: "excel-ec5e4",
-                            // storageBucket: "excel-ec5e4.firebasestorage.app",
-                            // messagingSenderId: "427552489685",
-                            // appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
-                            // measurementId: "G-TGR2BVMHD4"
-                        };
-
-                        let firebaseConfig = myFirebaseConfig;
-                        const configStr = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-                        if (Object.keys(myFirebaseConfig).length === 0 && configStr !== '{}') {
-                            firebaseConfig = JSON.parse(configStr);
-                        }
-
-                        if (!firebaseConfig.apiKey) {
-                            console.log("Firebase 설정이 비어있어 로컬 전용 모드로 작동합니다.");
-                            return;
-                        }
-
-                        const app = window.firebaseDeps.initializeApp(firebaseConfig);
-                        const auth = window.firebaseDeps.getAuth(app);
-                        this.db = window.firebaseDeps.getFirestore(app);
-                        this.appId = 'my-signature-board'; 
-
-                        await window.firebaseDeps.signInAnonymously(auth);
-
-                        window.firebaseDeps.onAuthStateChanged(auth, (user) => {
-                            if (user) {
-                                this.userId = user.uid;
-                                this.loadCloudData();
-                            } else {
-                                this.userId = null;
-                            }
-                        });
+                        localStorage.setItem('signatureApp_data', JSON.stringify(dataToSave));
                     } catch(e) {
-                        console.error("Firebase 초기화 오류:", e);
+                        console.warn("로컬 저장소 용량 초과 또는 권한 문제로 자동 저장에 실패했습니다.", e);
                     }
                 },
 
-                loadCloudData() {
-                    if (!this.userId || !this.db) return;
-                    const { doc, onSnapshot } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'settings', 'signature_settings');
-
-                    onSnapshot(configDoc, (snapshot) => {
-                        if (snapshot.exists()) {
-                            this.isSyncing = true;
-                            const data = snapshot.data();
+                // 브라우저 로컬 스토리지에서 데이터를 불러오는 함수
+                loadLocalData() {
+                    const savedDataStr = localStorage.getItem('signatureApp_data');
+                    if (savedDataStr) {
+                        try {
+                            const data = JSON.parse(savedDataStr);
                             if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
                             if(data.groups) this.groups = data.groups;
                             if(data.members) this.members = data.members;
@@ -194,10 +156,11 @@
                                     if(existingItem) {
                                         Object.assign(existingItem, conf);
                                         if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
+                                        else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
                                     } else {
                                         this.items.push({
                                             ...conf,
-                                            imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : this.getPlaceholderImage(),
+                                            imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
                                             hasAudio: conf.hasAudio || !!conf.audioUrl,
                                             hasImage: conf.hasImage || !!conf.mediaUrl,
                                             isGif: conf.isGif || false,
@@ -209,31 +172,10 @@
                             }
 
                             this.reassignGroups();
-                            setTimeout(() => { this.isSyncing = false; }, 100);
+                        } catch(e) {
+                            console.error("데이터 불러오기 중 오류:", e);
                         }
-                    }, (error) => {
-                        console.error("Firestore 동기화 오류:", error);
-                    });
-                },
-
-                saveCloudData() {
-                    if (!this.userId || !this.db || this.isSyncing) return;
-                    const { doc, setDoc } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'settings', 'signature_settings');
-                    
-                    const itemConfigs = this.items.map(i => ({
-                        id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
-                        isFrozen: i.isFrozen, frozenDataUrl: i.frozenDataUrl,
-                        audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
-                    }));
-
-                    setDoc(configDoc, {
-                        isDarkMode: this.isDarkMode,
-                        groups: JSON.parse(JSON.stringify(this.groups)),
-                        members: JSON.parse(JSON.stringify(this.members)),
-                        events: JSON.parse(JSON.stringify(this.events)),
-                        itemConfigs: itemConfigs
-                    }, {merge: true}).catch(e => console.error(e));
+                    }
                 },
 
                 async exportSettings() {
@@ -327,7 +269,7 @@
                                 this.items.sort((a, b) => a.id - b.id);
                             }
                             this.reassignGroups();
-                            this.saveCloudData();
+                            this.saveData(); // 복구 후 저장
                             alert("설정이 성공적으로 복구되었습니다!\n\n※ 로컬 폴더 연동을 사용하셨다면 [일괄 폴더 업로드] 버튼을 한 번 더 눌러주세요. (웹 서버 일괄 연결을 쓰셨다면 누를 필요 없습니다.)");
                         } catch(err) {
                             alert("설정 파일을 읽는 중 오류가 발생했습니다.");
@@ -420,10 +362,9 @@
                     }
                     this.items.sort((a, b) => a.id - b.id);
                     e.target.value = '';
-                    this.saveCloudData(); 
+                    this.saveData(); 
                 },
 
-                // 웹 서버 에셋 자동 연동 로직
                 autoLinkWebAssets() {
                     if(!this.webAssetBaseUrl.trim()) { alert("폴더 주소를 입력해주세요."); return; }
                     let count = 0;
@@ -452,11 +393,10 @@
                         if(updated) count++;
                     });
                     
-                    this.saveCloudData();
+                    this.saveData();
                     alert(`${count}개의 시그니처에 웹 서버 주소가 성공적으로 매핑되었습니다!`);
                 },
 
-                // 엑셀 외부링크 파일로 일괄 등록 엔진
                 importExcelLinks(e) {
                     const file = e.target.files[0];
                     if (!file) return;
@@ -569,7 +509,7 @@
 
                             if (updatedCount > 0 || addedCount > 0) {
                                 this.items.sort((a, b) => a.id - b.id);
-                                this.saveCloudData();
+                                this.saveData();
                                 alert(`엑셀 데이터 동기화 성공!\n새로 생성된 시그니처 틀: ${addedCount}개\n링크 업데이트: ${updatedCount}개`);
                             } else {
                                 alert("가져올 데이터(링크 또는 항목)를 찾지 못했습니다. 양식을 다시 확인해주세요.");
@@ -584,7 +524,6 @@
                     reader.readAsArrayBuffer(file);
                 },
 
-                // 오디오 재생/정지 로직
                 playAudio(item) {
                     if(!item.audioUrl) return;
                     const audioId = 'audio_player_' + item.id;
@@ -606,29 +545,29 @@
                     return matchedGroup ? matchedGroup.id : 'g_default';
                 },
                 reassignGroups() { this.items.forEach(item => { if (!item.isPersonal) item.groupId = this.findGroupForId(item.id); }); },
-                reorderGroups(oldIndex, newIndex) { const movedItem = this.groups.splice(oldIndex, 1)[0]; this.groups.splice(newIndex, 0, movedItem); this.saveCloudData(); },
+                reorderGroups(oldIndex, newIndex) { const movedItem = this.groups.splice(oldIndex, 1)[0]; this.groups.splice(newIndex, 0, movedItem); this.saveData(); },
                 
                 addGroup() {
                     if(!this.newGroupName.trim()) return;
                     this.groups.push({ id: 'g_' + Date.now(), name: this.newGroupName.trim(), start: parseInt(this.newGroupStart) || null, end: parseInt(this.newGroupEnd) || null, color: this.newGroupColor });
                     this.reassignGroups();
-                    this.newGroupName = ''; this.newGroupStart = ''; this.newGroupEnd = ''; this.newGroupColor = '#3B82F6'; this.saveCloudData();
+                    this.newGroupName = ''; this.newGroupStart = ''; this.newGroupEnd = ''; this.newGroupColor = '#3B82F6'; this.saveData();
                 },
                 startEditGroup(group) { this.editingGroupId = group.id; this.editGroupData = { name: group.name, start: group.start || '', end: group.end || '', color: group.color || '#3B82F6' }; },
                 saveEditGroup(id) {
                     const group = this.groups.find(g => g.id === id);
                     if(group) { group.name = this.editGroupData.name; group.start = parseInt(this.editGroupData.start) || null; group.end = parseInt(this.editGroupData.end) || null; group.color = this.editGroupData.color; this.reassignGroups(); }
-                    this.editingGroupId = null; this.saveCloudData();
+                    this.editingGroupId = null; this.saveData();
                 },
                 cancelEditGroup() { this.editingGroupId = null; },
-                removeGroup(id) { if(this.groups.length <= 1) return; this.groups = this.groups.filter(g => g.id !== id); this.reassignGroups(); this.saveCloudData(); },
+                removeGroup(id) { if(this.groups.length <= 1) return; this.groups = this.groups.filter(g => g.id !== id); this.reassignGroups(); this.saveData(); },
                 
-                addMember() { if(!this.newMemberName.trim()) return; this.members.push({ id: 'm_' + Date.now(), name: this.newMemberName.trim() }); this.newMemberName = ''; this.saveCloudData(); },
-                reorderMembers(oldIndex, newIndex) { const movedItem = this.members.splice(oldIndex, 1)[0]; this.members.splice(newIndex, 0, movedItem); this.saveCloudData(); },
-                removeMember(id) { this.members = this.members.filter(m => m.id !== id); this.items.forEach(item => { if(item.memberId === id) item.memberId = ''; }); this.saveCloudData(); },
+                addMember() { if(!this.newMemberName.trim()) return; this.members.push({ id: 'm_' + Date.now(), name: this.newMemberName.trim() }); this.newMemberName = ''; this.saveData(); },
+                reorderMembers(oldIndex, newIndex) { const movedItem = this.members.splice(oldIndex, 1)[0]; this.members.splice(newIndex, 0, movedItem); this.saveData(); },
+                removeMember(id) { this.members = this.members.filter(m => m.id !== id); this.items.forEach(item => { if(item.memberId === id) item.memberId = ''; }); this.saveData(); },
                 
-                addEvent() { if(!this.newEventTitle.trim()) return; this.events.push({ id: 'e_' + Date.now(), title: this.newEventTitle.trim(), targets: this.newEventTargets.trim() }); this.newEventTitle = ''; this.newEventTargets = ''; this.saveCloudData(); },
-                removeEvent(id) { this.events = this.events.filter(e => e.id !== id); this.saveCloudData(); },
+                addEvent() { if(!this.newEventTitle.trim()) return; this.events.push({ id: 'e_' + Date.now(), title: this.newEventTitle.trim(), targets: this.newEventTargets.trim() }); this.newEventTitle = ''; this.newEventTargets = ''; this.saveData(); },
+                removeEvent(id) { this.events = this.events.filter(e => e.id !== id); this.saveData(); },
 
                 getItemsByGroup(groupId) { return this.items.filter(i => i.groupId === groupId && !i.isPersonal); },
                 getEventItems(targetsString) {
@@ -741,7 +680,7 @@
                         this.gifInstance = null;
                     }
                     document.getElementById('modal_gif_container').innerHTML = ''; 
-                    this.saveCloudData();
+                    this.saveData();
                 },
                 scrubGif() {
                     if (this.gifInstance && this.gifTotalFrames > 0) {
@@ -1015,10 +954,9 @@
             <div class="flex items-center gap-2">
                 <i class="ph-fill ph-magic-wand text-blue-600 text-2xl"></i>
                 <h1 class="font-bold text-xl">시그니처 보드 매니저 Pro</h1>
-                <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-2" x-show="isSyncing">클라우드 동기화 됨</span>
             </div>
             <!-- 다크모드 / 라이트모드 토글 버튼 -->
-            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-4 text-gray-600" title="테마 변경">
+            <button @click="isDarkMode = !isDarkMode; saveData()" class="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-4 text-gray-600" title="테마 변경">
                 <i class="ph-fill ph-moon text-lg" x-show="!isDarkMode"></i>
                 <i class="ph-fill ph-sun text-lg" x-show="isDarkMode" style="display: none;"></i>
             </button>
@@ -1301,11 +1239,11 @@
                                 <span class="text-sm font-black text-gray-800" x-text="`${item.id} ${cleanName(item.name)}`"></span>
                                 <div class="flex gap-4 text-xs font-bold">
                                     <label class="flex items-center gap-1.5 cursor-pointer">
-                                        <input type="checkbox" x-model="item.isPersonal" class="accent-blue-600 w-4 h-4" @change="saveCloudData()">
+                                        <input type="checkbox" x-model="item.isPersonal" class="accent-blue-600 w-4 h-4" @change="saveData()">
                                         <span :class="item.isPersonal ? 'text-blue-600' : 'text-gray-400'">개인시그</span>
                                     </label>
                                     <label class="flex items-center gap-1.5 cursor-pointer">
-                                        <input type="checkbox" x-model="item.isNew" class="accent-yellow-500 w-4 h-4" @change="saveCloudData()">
+                                        <input type="checkbox" x-model="item.isNew" class="accent-yellow-500 w-4 h-4" @change="saveData()">
                                         <span :class="item.isNew ? 'text-yellow-600' : 'text-gray-400'">NEW</span>
                                     </label>
                                 </div>
@@ -1324,14 +1262,14 @@
                                 </div>
                                 <div class="flex flex-col flex-1 gap-2">
                                     <template x-if="!item.isPersonal">
-                                        <select x-model="item.groupId" @change="saveCloudData()" class="border border-gray-300 rounded py-1.5 px-2 text-sm bg-gray-50 focus:outline-blue-500 w-full text-gray-700">
+                                        <select x-model="item.groupId" @change="saveData()" class="border border-gray-300 rounded py-1.5 px-2 text-sm bg-gray-50 focus:outline-blue-500 w-full text-gray-700">
                                             <template x-for="g in groups" :key="g.id">
                                                 <option :value="g.id" x-text="g.name" :selected="item.groupId === g.id"></option>
                                             </template>
                                         </select>
                                     </template>
                                     <template x-if="item.isPersonal">
-                                        <select x-model="item.memberId" @change="saveCloudData()" class="border-2 border-blue-400 rounded py-1.5 px-2 text-sm bg-blue-50 focus:outline-blue-500 w-full text-blue-900 font-bold">
+                                        <select x-model="item.memberId" @change="saveData()" class="border-2 border-blue-400 rounded py-1.5 px-2 text-sm bg-blue-50 focus:outline-blue-500 w-full text-blue-900 font-bold">
                                             <option value="">-- 멤버 지정 (미지정) --</option>
                                             <template x-for="m in members" :key="m.id">
                                                 <option :value="m.id" x-text="m.name" :selected="item.memberId === m.id"></option>
@@ -1343,11 +1281,11 @@
                                     <div class="flex flex-col gap-1 mt-1">
                                         <div class="flex items-center gap-2">
                                             <i class="ph-fill ph-image text-gray-400"></i>
-                                            <input type="text" x-model="item.mediaUrl" @change="saveCloudData(); if(item.mediaUrl) { item.imgUrl = item.mediaUrl; item.hasImage = true; item.isGif = item.mediaUrl.toLowerCase().includes('.gif'); }" placeholder="이미지/GIF 외부 링크 (옵션)" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50">
+                                            <input type="text" x-model="item.mediaUrl" @change="saveData(); if(item.mediaUrl) { item.imgUrl = item.mediaUrl; item.hasImage = true; item.isGif = item.mediaUrl.toLowerCase().includes('.gif'); }" placeholder="이미지/GIF 외부 링크 (옵션)" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50">
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <i class="ph-fill ph-music-note text-gray-400"></i>
-                                            <input type="text" x-model="item.audioUrl" @change="saveCloudData(); if(item.audioUrl) item.hasAudio = true;" placeholder="음원 외부 링크 (옵션)" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50">
+                                            <input type="text" x-model="item.audioUrl" @change="saveData(); if(item.audioUrl) item.hasAudio = true;" placeholder="음원 외부 링크 (옵션)" class="w-full border rounded px-2 py-1 text-xs focus:outline-blue-500 text-blue-600 bg-gray-50">
                                         </div>
                                     </div>
 
