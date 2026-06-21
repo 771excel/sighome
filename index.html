@@ -5,44 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>771 시그니처 뷰어</title>
     
-    <!-- Tailwind CSS (외부 CDN 연동) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- 외부 라이브러리 연동 (JS) -->
+    <!-- xlsx-js-style -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    
+    <!-- SortableJS -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <!-- Libgif.js -->
     <script src="https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js"></script>
+
+    <!-- JSZip -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-    <!-- Tailwind 커스텀 설정 -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'] },
-                    colors: { board: '#111827', panel: '#1f2937' }
-                }
-            }
-        }
-    </script>
-
-    <!-- CSS 스타일 영역 -->
-    <style>
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-        body { font-family: 'Pretendard', sans-serif; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-        [x-cloak] { display: none !important; }
-        .sortable-ghost { opacity: 0.4; background-color: #f9fafb; }
-        #modal_gif_container canvas { max-width: 100%; max-height: 50vh; object-fit: contain; margin: 0 auto; border-radius: 0.5rem; }
-    </style>
-
-    <!-- Firebase SDK 로드 -->
+    <!-- Firebase Cloud Storage -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -50,7 +28,6 @@
         window.firebaseDeps = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, setDoc, onSnapshot };
     </script>
 
-    <!-- 어플리케이션 메인 로직 -->
     <script>
         window.signatureApp = function() {
             return {
@@ -63,11 +40,10 @@
                 toastTimeout: null,
                 
                 // Firebase 관련 상태 변수
-                appId: null,
                 userId: null,
                 db: null,
                 isSyncing: false,
-                _unsubscribe: null, 
+                _unsubscribe: null, // 중복 동기화 방지
                 
                 isDarkMode: true,
                 isViewerMode: false,
@@ -92,6 +68,7 @@
                 newEventTargets: '',
                 newMemberName: '',
                 
+                // 웹 자산 일괄 연결 폼 상태
                 webAssetBaseUrl: './assets/',
                 webAssetImgExt: '.gif',
                 webAssetAudioExt: '.mp3',
@@ -99,6 +76,7 @@
                 detailFilter: 'all',
                 searchQuery: '', 
                 
+                // 뷰어 줌인/줌아웃 설정 (모바일 최적화 반응형 추가)
                 zoomLevel: 3,
                 zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
                 zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
@@ -136,13 +114,15 @@
                     const urlParams = new URLSearchParams(window.location.search);
                     if (urlParams.get('viewer') === 'true') {
                         this.isViewerMode = true;
+                        
+                        // 🔒 뷰어 모드 보안 강화 (우클릭, 드래그, 텍스트 선택 방지)
                         document.addEventListener('contextmenu', e => e.preventDefault());
                         document.addEventListener('dragstart', e => e.preventDefault());
                         document.addEventListener('selectstart', e => e.preventDefault());
                     }
 
                     this.initDragScroll(); 
-                    this.initFirebase(); 
+                    this.initFirebase(); // Firebase 초기화 실행
                 },
 
                 showToast(msg) {
@@ -184,74 +164,60 @@
                     }, 100);
                 },
 
+                // 1. Firebase 클라우드 초기화 (권한 오류 해결 버전)
                 async initFirebase() {
                     if (!window.firebaseDeps) {
                         setTimeout(() => this.initFirebase(), 100);
                         return;
                     }
                     try {
-                        let firebaseConfig;
-                        try {
-                            firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-                        } catch (e) {}
-
-                        if (!firebaseConfig) {
-                            firebaseConfig = {
-                                apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
-                                authDomain: "excel-ec5e4.firebaseapp.com",
-                                projectId: "excel-ec5e4",
-                                storageBucket: "excel-ec5e4.firebasestorage.app",
-                                messagingSenderId: "427552489685",
-                                appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
-                                measurementId: "G-TGR2BVMHD4"
-                            };
-                        }
+                        const firebaseConfig = {
+                            apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
+                            authDomain: "excel-ec5e4.firebaseapp.com",
+                            projectId: "excel-ec5e4",
+                            storageBucket: "excel-ec5e4.firebasestorage.app",
+                            messagingSenderId: "427552489685",
+                            appId: "1:427552489685:web:5c9a95aa347ddc4890225c",
+                            measurementId: "G-TGR2BVMHD4"
+                        };
 
                         const app = window.firebaseDeps.initializeApp(firebaseConfig);
                         this.db = window.firebaseDeps.getFirestore(app);
-                        this.appId = typeof __app_id !== 'undefined' ? __app_id : 'excel-signature-board';
+
+                        // 권한, 로그인 제약 없이 즉시 데이터를 먼저 불러옵니다. (모바일 뷰어 화면 깨짐 원천 차단)
+                        this.loadCloudData();
 
                         const auth = window.firebaseDeps.getAuth(app);
                         
-                        const initAuth = async () => {
-                            try {
-                                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                    await window.firebaseDeps.signInWithCustomToken(auth, __initial_auth_token);
-                                } else {
-                                    await window.firebaseDeps.signInAnonymously(auth);
-                                }
-                            } catch (err) {
-                                console.warn("인증 실패, 우회 시도:", err);
-                                try {
-                                    await window.firebaseDeps.signInAnonymously(auth);
-                                } catch (err2) {
-                                    console.error("익명 로그인도 실패:", err2);
-                                }
-                            }
-                        };
-                        
-                        await initAuth();
-
                         window.firebaseDeps.onAuthStateChanged(auth, (user) => {
                             if (user) {
                                 this.userId = user.uid;
+                                // 로그인이 확인되면 혹시 누락된 데이터를 위해 한번 더 확실히 불러옴
                                 this.loadCloudData(); 
                             } else {
                                 this.userId = null;
                             }
                         });
 
+                        try {
+                            await window.firebaseDeps.signInAnonymously(auth);
+                        } catch (authError) {
+                            console.warn("모바일 브라우저의 보안 정책(iframe 차단)으로 로그인이 생략되었습니다. 읽기 전용으로 화면을 표시합니다.", authError);
+                        }
                     } catch(e) {
                         console.error("Firebase 초기화 오류:", e);
                     }
                 },
 
+                // 2. 클라우드에서 데이터 불러오기 (실시간 동기화)
                 loadCloudData() {
-                    if (!this.db || !this.userId || this._unsubscribe) return; 
+                    // db 객체가 세팅되었는지 확인 (유저 로그인 여부는 무시하고 무조건 불러오기 시도)
+                    if (!this.db || this._unsubscribe) return; 
                     
                     const { doc, onSnapshot } = window.firebaseDeps;
                     
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
+                    // 기존 데이터가 보존된 원래 경로로 복구
+                    const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
 
                     this._unsubscribe = onSnapshot(configDoc, (snapshot) => {
                         if (snapshot.exists()) {
@@ -284,21 +250,26 @@
                             }
 
                             this.reassignGroups();
+                            // UI에 동기화 상태 표시를 위한 딜레이
                             setTimeout(() => { this.isSyncing = false; }, 100);
                         }
                     }, (error) => {
-                        console.error("Firestore 동기화 권한 에러:", error);
+                        console.error("Firestore 동기화 권한 에러. 파이어베이스 규칙을 개방해주세요:", error);
+                        // 에러가 나면 Toast 메시지로 안내
                         if (error.code === 'permission-denied') {
-                            this.showToast("에러: 파이어베이스의 읽기/쓰기 권한이 막혀있습니다.");
+                            this.showToast("에러: 파이어베이스의 읽기/쓰기 규칙(Rules)이 개방되어 있지 않습니다.");
                         }
                     });
                 },
 
+                // 3. 클라우드에 데이터 저장
                 saveCloudData() {
-                    if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
+                    // 저장(쓰기)할 때는 뷰어모드가 아니어야 함
+                    if (!this.db || this.isSyncing || this.isViewerMode) return;
                     
                     const { doc, setDoc } = window.firebaseDeps;
-                    const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
+                    // 기존 데이터가 보존된 원래 경로
+                    const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
                     
                     const itemConfigs = this.items.map(i => ({
                         id: i.id, name: i.name, isPersonal: i.isPersonal, isNew: i.isNew, memberId: i.memberId, groupId: i.groupId,
@@ -314,7 +285,7 @@
                         itemConfigs: itemConfigs
                     }, {merge: true}).catch(e => {
                         console.error("저장 권한 에러:", e);
-                        this.showToast("저장 실패: 파이어베이스 권한을 확인해주세요.");
+                        this.showToast("저장 실패: 파이어베이스 권한(Rules)을 확인해주세요.");
                     });
                 },
 
@@ -411,7 +382,7 @@
                                 this.items.sort((a, b) => a.id - b.id);
                             }
                             this.reassignGroups();
-                            this.saveCloudData();
+                            this.saveCloudData(); // 복구 후 클라우드 저장
                             this.showToast("설정이 성공적으로 복구되었습니다! (웹 링크 연동 기준)");
                         } catch(err) {
                             this.showToast("설정 파일을 읽는 중 오류가 발생했습니다.");
@@ -453,7 +424,7 @@
                         } else if (file.type.startsWith('audio/') || file.name.toLowerCase().match(/\.(mp3|wav|ogg|m4a)$/)) {
                             tempMap[numericId].audioName = file.name.replace(/\.[^/.]+$/, "");
                             tempMap[numericId].hasAudio = true;
-                            tempMap[numericId].audioUrl = URL.createObjectURL(file); 
+                            tempMap[numericId].audioUrl = URL.createObjectURL(file); // 로컬 오디오 재생 지원
                         }
                     }
 
@@ -478,7 +449,7 @@
                             }
                             if (tempMap[id].hasAudio) {
                                 existingItem.name = tempMap[id].audioName;
-                                existingItem.audioUrl = tempMap[id].audioUrl; 
+                                existingItem.audioUrl = tempMap[id].audioUrl; // 로컬 오디오 업데이트
                                 existingItem.hasAudio = true;
                             }
                             if (!existingItem.isPersonal && !existingItem.groupId) existingItem.groupId = targetGroupId;
@@ -925,6 +896,7 @@
 
                 cleanName(name) { return name.replace(/^[\d_.\s]+/, ''); },
 
+                // 뷰어 전용 모드 링크 복사 (HTML iframe 태그 발급)
                 copyViewerLink() {
                     const url = window.location.origin + window.location.pathname + '?viewer=true';
                     // 게시판 등에 바로 붙여넣을 수 있는 모바일 최적화 반응형 iframe 태그
@@ -946,6 +918,7 @@
                     document.body.removeChild(textArea);
                 },
 
+                // 엑셀 다운로드 
                 async exportExcel() {
                     if(this.items.length === 0) {
                         this.showToast("출력할 목록이 없습니다."); return;
@@ -1097,69 +1070,103 @@
             };
         };
     </script>
+    
+    <!-- Alpine.js -->
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Pretendard"', '"Noto Sans KR"', 'sans-serif'] },
+                    colors: { board: '#111827', panel: '#1f2937' }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+        [x-cloak] { display: none !important; }
+        .sortable-ghost { opacity: 0.4; background-color: #f9fafb; }
+        /* GIF 캔버스 크기 제어 */
+        #modal_gif_container canvas { max-width: 100%; max-height: 50vh; object-fit: contain; margin: 0 auto; border-radius: 0.5rem; }
+    </style>
 </head>
 
+<!-- 모바일 iframe 환경을 완벽하게 호환하기 위한 바디 반응형 클래스 최적화 -->
 <body class="transition-colors duration-300" 
       :class="isViewerMode ? (isDarkMode ? 'bg-gray-100 text-gray-800' : 'bg-gray-50 text-gray-800') : (isDarkMode ? 'bg-gray-100 text-gray-800 h-screen max-h-screen flex flex-col overflow-hidden' : 'bg-gray-50 text-gray-800 h-screen max-h-screen flex flex-col overflow-hidden')" 
       x-data="signatureApp()" x-cloak>
     
-    <!-- 상단 네비게이션바 (높이 및 로고 크기 최적화 완료) -->
-    <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b gap-2">
-        <div class="flex items-center gap-2 sm:gap-4 overflow-hidden">
-            <div class="flex items-center gap-2 shrink-0">
-                <!-- 로고 크기 축소 (h-8 ~ h-10) 및 이쁘게 정렬 -->
-                <img src="logo.png" alt="771 Logo" class="h-8 sm:h-10 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                <i class="ph-fill ph-magic-wand text-blue-600 text-3xl sm:text-4xl" style="display: none;"></i>
+    <!-- 상단 네비게이션바 -->
+    <header class="bg-white shadow-sm h-auto sm:h-20 py-2 sm:py-0 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b flex-wrap gap-2">
+        <div class="flex items-center gap-3 sm:gap-4">
+            <div class="flex items-center gap-2">
+                <!-- 로고 적용 (크기 절반으로 축소) -->
+                <img src="logo.png" alt="771 Logo" class="h-12 sm:h-16 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <i class="ph-fill ph-magic-wand text-blue-600 text-4xl sm:text-5xl" style="display: none;"></i>
                 
-                <h1 class="font-black text-base sm:text-xl ml-1 shrink-0">771 시그니처 뷰어</h1>
+                <h1 class="font-black text-lg sm:text-xl ml-1">771 시그니처 뷰어</h1>
+                <!-- 클라우드 동기화 상태 표시기 복구 -->
+                <span class="text-[10px] sm:text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-1 hidden sm:inline-block border border-green-200" x-show="isSyncing">클라우드 동기화 됨</span>
                 
-                <!-- 동기화 상태 -->
-                <span class="text-[10px] sm:text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-1 border border-green-200 shrink-0 hidden md:inline-block" x-show="isSyncing">동기화 중</span>
-                
-                <!-- 링크 발급 버튼 -->
-                <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors shadow-sm shrink-0" title="HTML 게시글용 링크 복사">
-                    <i class="ph ph-link text-sm"></i> <span class="hidden sm:inline">뷰어 링크</span>
+                <!-- 뷰어 링크 복사 버튼 (관리자에게만 보임) -->
+                <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-1 sm:ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-sm" title="HTML이나 게시글에 공유할 링크 발급">
+                    <i class="ph ph-link text-sm"></i> <span class="hidden sm:inline">뷰어 링크 발급</span><span class="sm:hidden">링크</span>
                 </button>
             </div>
+            <!-- 다크모드 / 라이트모드 토글 버튼 -->
+            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-1 sm:ml-2 text-gray-600 shrink-0" title="테마 변경">
+                <i class="ph-fill ph-moon text-lg sm:text-xl" x-show="!isDarkMode"></i>
+                <i class="ph-fill ph-sun text-lg sm:text-xl" x-show="isDarkMode" style="display: none;"></i>
+            </button>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-3">
             
-            <!-- 테마 변경 버튼 -->
-            <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-auto shrink-0" title="테마 변경">
-                <i class="ph-fill ph-moon text-lg" x-show="!isDarkMode"></i>
-                <i class="ph-fill ph-sun text-lg" x-show="isDarkMode" style="display: none;"></i>
+            <!-- 뷰어 줌 컨트롤러 -->
+            <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 mr-1 sm:mr-2 shadow-sm border border-gray-200" title="화면 확대/축소">
+                <button @click="zoomOut()" class="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
+                    <i class="ph ph-minus font-bold text-base sm:text-lg"></i>
+                </button>
+                <span class="text-xs sm:text-sm font-bold w-10 sm:w-14 text-center text-gray-700" x-text="['50%', '75%', '100%', '125%', '150%'][zoomLevel - 1]"></span>
+                <button @click="zoomIn()" class="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel >= 5">
+                    <i class="ph ph-plus font-bold text-base sm:text-lg"></i>
+                </button>
+            </div>
+
+            <!-- 뷰어 모드 전용 보드 내 검색창 -->
+            <div x-show="isViewerMode" class="relative mr-2 sm:mr-4 hidden sm:block">
+                <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="border border-gray-300 rounded-full pl-10 pr-4 py-1.5 sm:py-2 text-sm focus:outline-blue-500 w-40 sm:w-56 bg-gray-50 transition-all focus:w-72 shadow-sm">
+            </div>
+
+            <button x-show="!isViewerMode" @click="exportExcel()"
+                    class="bg-green-600 hover:bg-green-700 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm hidden sm:flex">
+                <i class="ph ph-file-xls"></i> 엑셀 업로드 양식
+            </button>
+            <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-sm sm:text-base font-semibold flex items-center gap-1.5 sm:gap-2 transition-colors shadow-sm disabled:opacity-50">
+                <i class="ph ph-download-simple" x-show="!isDownloading"></i>
+                <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
+                <span x-text="isDownloading ? '고화질 캡처 중...' : '이미지 캡처'"></span>
             </button>
         </div>
         
-        <div class="flex items-center gap-2">
-            <!-- 뷰어 줌 컨트롤러 -->
-            <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 shadow-sm border border-gray-200 shrink-0" title="화면 확대/축소">
-                <button @click="zoomOut()" class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
-                    <i class="ph ph-minus font-bold text-sm sm:text-base"></i>
-                </button>
-                <span class="text-[10px] sm:text-xs font-bold w-10 sm:w-12 text-center text-gray-700" x-text="['50%', '75%', '100%', '125%', '150%'][zoomLevel - 1]"></span>
-                <button @click="zoomIn()" class="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel >= 5">
-                    <i class="ph ph-plus font-bold text-sm sm:text-base"></i>
-                </button>
-            </div>
-
-            <!-- 관리자용 기능들 -->
-            <button x-show="!isViewerMode" @click="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm shrink-0 hidden sm:flex">
-                <i class="ph ph-file-xls"></i> 엑셀 양식
-            </button>
-            <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 shrink-0">
-                <i class="ph ph-download-simple" x-show="!isDownloading"></i>
-                <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
-                <span x-text="isDownloading ? '캡처 중...' : '이미지 캡처'"></span>
-            </button>
+        <!-- 모바일 전용 검색창 (화면이 작을때 아래로 내려옴) -->
+        <div x-show="isViewerMode" class="relative w-full mt-2 sm:hidden block">
+            <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+            <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="w-full border border-gray-300 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-blue-500 bg-gray-50 transition-all shadow-sm">
         </div>
     </header>
-
-    <!-- 모바일 검색창 (뷰어 모드 전용) -->
-    <div x-show="isViewerMode" class="bg-white px-4 py-2 border-b w-full shrink-0">
-        <div class="relative w-full max-w-md mx-auto">
-            <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-            <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="w-full border border-gray-300 rounded-full pl-10 pr-4 py-1.5 text-sm focus:outline-blue-500 bg-gray-50 transition-all shadow-sm">
-        </div>
-    </div>
 
     <!-- 메인 워크스페이스 -->
     <main class="flex flex-1 relative" :class="isViewerMode ? 'flex-col' : 'overflow-hidden min-h-0'">
@@ -1201,6 +1208,9 @@
                         <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-indigo-900">
                             <i class="ph ph-globe"></i> [방법2] 웹 서버 링크로 일괄 연결
                         </h2>
+                        <p class="text-xs text-indigo-700 mb-3 leading-relaxed">
+                            웹(GitHub 등)에 올린 <code>assets</code> 폴더 주소를 입력하시면, 1번부터 끝 번호까지 인터넷 주소로 자동 매핑해줍니다! <b>뷰어들이 원본을 보게 하려면 이 기능을 꼭 사용하세요.</b>
+                        </p>
                         <div class="flex flex-col gap-2">
                             <div class="flex items-center gap-2">
                                 <span class="text-sm font-bold text-indigo-800 w-24">웹 폴더 주소:</span>
@@ -1225,7 +1235,7 @@
                                 </select>
                             </div>
                             <button @click="autoLinkWebAssets()" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                                <i class="ph-fill ph-link"></i> 서버 주소로 전체 매핑
+                                <i class="ph-fill ph-link"></i> 서버 주소로 전체 시그니처 자동 매핑
                             </button>
                         </div>
                     </section>
@@ -1235,7 +1245,10 @@
                         <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-emerald-900">
                             <i class="ph ph-file-xls"></i> [방법3] 엑셀 외부링크 일괄 등록
                         </h2>
-                        <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm mt-2">
+                        <p class="text-xs text-emerald-700 mb-3 leading-relaxed">
+                            다운로드한 <b>엑셀 파일의 D열(링크)</b>에 호스팅해 둔 이미지나 음원의 URL을 적어 넣고 업로드하시면, 시그니처 보드에 외부링크가 1초만에 일괄 등록됩니다. 서버 부하를 획기적으로 줄일 수 있습니다.
+                        </p>
+                        <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm">
                             <input type="file" accept=".xlsx, .xls, .csv" @change="importExcelLinks" class="hidden">
                             <div class="flex items-center gap-2">
                                 <i class="ph ph-upload-simple text-xl"></i>
@@ -1336,7 +1349,7 @@
                                             </div>
                                             <div class="flex justify-end gap-2 mt-1">
                                                 <button @click="cancelEditGroup()" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-300 font-bold">취소</button>
-                                                <button @click="saveEditGroup(group.id)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold">저장</button>
+                                                <button @click="saveEditGroup(group.id)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold">변경사항 저장</button>
                                             </div>
                                         </div>
                                     </template>
@@ -1396,7 +1409,7 @@
 
                     <div class="relative mb-4">
                         <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg"></i>
-                        <input type="text" x-model="searchQuery" placeholder="시그니처 번호/이름 검색..." class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-blue-500 focus:border-blue-500 bg-gray-50 text-gray-800 shadow-sm transition-all">
+                        <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5 text-sm focus:outline-blue-500 focus:border-blue-500 bg-gray-50 text-gray-800 shadow-sm transition-all">
                     </div>
 
                     <template x-if="filteredItems.length === 0">
