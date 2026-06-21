@@ -198,11 +198,6 @@ document.addEventListener('alpine:init', () => {
                         await signInAnonymously(auth); 
                     } catch (err2) { 
                         console.error(err2); 
-                        if(err2.code === 'auth/unauthorized-domain') {
-                            this.showToast("🚨 에러: Firebase Auth '승인된 도메인'에 깃허브 주소를 추가해주세요!");
-                        } else {
-                            this.showToast("인증 실패: " + err2.message);
-                        }
                     }
                 }
 
@@ -266,24 +261,30 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // [핵심 픽스] 용량이 너무 큰 이미지 데이터를 저장 직전에 압축해주는 헬퍼 함수 (1MB 에러 완벽 차단)
-        compressDataUrl(dataUrl) {
+        compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
             return new Promise(resolve => {
                 if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
-                // 이미 용량이 작으면 패스
-                if(dataUrl.length < 80000) return resolve(dataUrl); 
+                if(dataUrl.length < 20000) return resolve(dataUrl); 
 
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if(width > maxWidth) {
+                        height = Math.round(height * (maxWidth / width));
+                        width = maxWidth;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    
                     const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    // 0.75 퀄리티의 WebP로 압축 (용량을 1/10 수준으로 줄임)
-                    resolve(canvas.toDataURL('image/webp', 0.75));
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    resolve(canvas.toDataURL('image/webp', quality));
                 };
-                img.onerror = () => resolve(dataUrl); // 로드 실패시 원본 반환
+                img.onerror = () => resolve(dataUrl);
                 img.src = dataUrl;
             });
         },
@@ -291,20 +292,20 @@ document.addEventListener('alpine:init', () => {
         async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
-            // 데이터베이스 저장 전, 용량이 과도하게 큰 썸네일(PNG 등)이 있으면 WebP로 자동 압축
             let needsCompression = false;
             for (let i of this.items) {
-                if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 100000) {
+                if ((i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) || 
+                    (i.mediaUrl && i.mediaUrl.startsWith('data:image/') && i.mediaUrl.length > 30000)) {
                     needsCompression = true; break;
                 }
             }
 
             if (needsCompression) {
-                this.showToast("☁️ 데이터베이스 용량 최적화 중...");
+                this.showToast("☁️ 데이터베이스 최적화 중... (화면이 잠시 멈출 수 있습니다)");
                 for (let i of this.items) {
-                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 100000) {
-                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl);
-                        if (i.imgUrl && i.imgUrl.length > 100000) i.imgUrl = i.frozenDataUrl;
+                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) {
+                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl, 0.6, 250);
+                        if (i.imgUrl && i.imgUrl.startsWith('data:image/') && i.imgUrl.length > 30000) i.imgUrl = i.frozenDataUrl;
                     }
                 }
             }
@@ -317,23 +318,49 @@ document.addEventListener('alpine:init', () => {
                 audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
             }));
 
-            // 저장 직전 1MB 초과 여부 최종 안전 체크
-            const payloadStr = JSON.stringify(itemConfigs);
+            let payloadStr = JSON.stringify({
+                isDarkMode: this.isDarkMode,
+                groups: this.groups,
+                members: this.members,
+                events: this.events,
+                itemConfigs: itemConfigs
+            });
+
             if (payloadStr.length > 950000) {
-                this.showToast("🚨 에러: 압축 후에도 데이터가 너무 큽니다. 고정된 썸네일 개수를 줄여주세요!");
-                return;
+                this.showToast("🚨 용량 한계 도달! 일부 무거운 캡처 이미지를 해제하여 안전하게 저장합니다.");
+                
+                let sortedConfigs = [...itemConfigs].sort((a, b) => (b.frozenDataUrl ? b.frozenDataUrl.length : 0) - (a.frozenDataUrl ? a.frozenDataUrl.length : 0));
+                
+                for (let conf of sortedConfigs) {
+                    if (conf.frozenDataUrl && conf.frozenDataUrl.length > 1000) {
+                        let target = itemConfigs.find(c => c.id === conf.id);
+                        if (target) {
+                            target.isFrozen = false;
+                            target.frozenDataUrl = null;
+                        }
+                        
+                        payloadStr = JSON.stringify({
+                            isDarkMode: this.isDarkMode, groups: this.groups, members: this.members, events: this.events, itemConfigs: itemConfigs
+                        });
+                        
+                        if (payloadStr.length <= 950000) break; 
+                    }
+                }
+
+                this.items.forEach(i => {
+                    const conf = itemConfigs.find(c => c.id === i.id);
+                    if (conf && !conf.isFrozen && i.isFrozen) {
+                        i.isFrozen = false; i.frozenDataUrl = null;
+                        if(i.originalGifUrl) i.imgUrl = i.originalGifUrl;
+                    }
+                });
             }
 
-            setDoc(configDoc, {
-                isDarkMode: this.isDarkMode,
-                groups: JSON.parse(JSON.stringify(this.groups)),
-                members: JSON.parse(JSON.stringify(this.members)),
-                events: JSON.parse(JSON.stringify(this.events)),
-                itemConfigs: itemConfigs
-            }, {merge: true}).catch(e => { 
+            setDoc(configDoc, JSON.parse(payloadStr), {merge: true}).then(() => {
+            }).catch(e => { 
                 console.error(e);
                 if (e.code === 'resource-exhausted' || e.message.includes('exceeds')) {
-                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과(1MB). 캡처된 이미지를 줄이세요.");
+                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과(1MB).");
                 } else if (e.code === 'permission-denied') {
                     this.showToast("🚨 저장 실패: 파이어베이스 데이터베이스 쓰기 권한이 없습니다.");
                 } else {
@@ -384,14 +411,14 @@ document.addEventListener('alpine:init', () => {
             } catch(e) { this.showToast("ZIP 파일 생성 오류가 발생했습니다."); }
         },
 
-        // [핵심 픽스] 이전에 무거운 PNG로 저장된 백업 파일을 불러올 때, 
-        // 1MB 에러 방지를 위해 실시간으로 가볍게 압축하면서 배열에 넣도록 수정되었습니다.
         importSettings(e) {
             const file = e.target.files[0];
             if(!file) return;
             const reader = new FileReader();
-            reader.onload = async (event) => { // 비동기(async) 처리로 변경
+            
+            reader.onload = async (event) => { 
                 try {
+                    this.showToast("백업 파일 로딩 및 용량 최적화 중입니다...");
                     const data = JSON.parse(event.target.result);
                     if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
                     if(data.groups) this.groups = data.groups;
@@ -399,13 +426,11 @@ document.addEventListener('alpine:init', () => {
                     if(data.members) this.members = data.members;
                     
                     if(data.itemConfigs) {
-                        this.showToast("데이터를 분석하고 최적화하는 중입니다...");
                         let updatedItems = [...this.items]; 
                         
                         for (let conf of data.itemConfigs) {
-                            // PNG 등 과도하게 무거운 썸네일을 WebP로 즉시 변환 복구
-                            if (conf.isFrozen && conf.frozenDataUrl && conf.frozenDataUrl.length > 100000) {
-                                conf.frozenDataUrl = await this.compressDataUrl(conf.frozenDataUrl);
+                            if (conf.isFrozen && conf.frozenDataUrl && conf.frozenDataUrl.length > 30000) {
+                                conf.frozenDataUrl = await this.compressDataUrl(conf.frozenDataUrl, 0.6, 250);
                             }
 
                             let idx = updatedItems.findIndex(i => i.id === conf.id);
@@ -428,9 +453,11 @@ document.addEventListener('alpine:init', () => {
                         this.items = updatedItems;
                     }
                     this.reassignGroups(); 
-                    await this.saveCloudData(); // 완료될때까지 안전하게 대기
+                    
+                    await this.saveCloudData(); 
                     this.showToast("설정이 성공적으로 복구 및 최적화되었습니다.");
                 } catch(err) { 
+                    console.error(err);
                     this.showToast("설정 파일을 읽는 중 오류가 발생했습니다."); 
                 }
             };
@@ -765,11 +792,10 @@ document.addEventListener('alpine:init', () => {
             
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
-            // [원복됨] 개별 썸네일 고정 데이터는 파이어베이스 1MB 에러를 막기위해 다시 가벼운 WebP로 저장합니다. 
-            // 다운로드되는 전체 이미지만 고해상도 PNG를 사용합니다.
+            // 데이터베이스 용량 터지는 것을 막기 위해 가벼운 포맷 적용 (다운로드 PNG 기능엔 영향 없음)
             const dataUrl = outCanvas.toDataURL('image/webp', 0.8); 
             this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
-            this.saveCloudData(); // 즉시 클라우드에 반영 (압축되었으므로 안전)
+            this.saveCloudData();
         },
         resetModalFrame() {
             if (!this.modalItem) return;
@@ -860,7 +886,8 @@ document.addEventListener('alpine:init', () => {
                     return { top: (rect.top - boardRect.top) * scale, bottom: (rect.bottom - boardRect.top) * scale };
                 });
 
-                const MAX_HEIGHT = 15000; 
+                // [수정됨] 15000px일 때 35MB가 나왔으므로, 8000px로 줄여서 15~18MB가 나오도록 조정
+                const MAX_HEIGHT = 8000; 
 
                 const saveCanvasPart = async (partCanvas, filename) => {
                     return new Promise(resolve => {
