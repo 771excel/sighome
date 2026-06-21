@@ -1579,4 +1579,170 @@
                                                 <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                             </span>
                                             <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" 
-                                                  :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300
+                                                  :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')]" 
+                                                  x-text="cleanName(item.name)"></span>
+                                            <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="mt-12 mb-4 space-y-6">
+                    <template x-for="member in members" :key="member.id">
+                        <div x-show="getPersonalItemsByMember(member.id).length > 0 || !isViewerMode" class="border-2 rounded-xl p-4 sm:p-6 shadow-lg relative overflow-hidden transition-colors duration-300" :class="isDarkMode ? 'bg-blue-900/30 border-blue-500/50' : 'bg-blue-50 border-blue-300'">
+                            <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                            <div class="flex items-center gap-3 mb-5 border-b pb-3 relative z-10 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-blue-500/30' : 'border-blue-300'">
+                                <i class="ph-fill ph-crown text-blue-500 text-3xl"></i>
+                                <h2 class="text-xl sm:text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-blue-100' : 'text-blue-900'">
+                                    <span x-text="member.name"></span> 
+                                    <span class="text-base sm:text-lg font-medium ml-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">개인 시그니처</span>
+                                    <span class="text-base sm:text-lg font-bold ml-1" :class="isDarkMode ? 'text-blue-400/70' : 'text-blue-400'" x-text="`(${getPersonalItemsByMember(member.id).length}개)`"></span>
+                                </h2>
+                            </div>
+                            
+                            <template x-if="getPersonalItemsByMember(member.id).length > 0">
+                                <div class="grid gap-4 sm:gap-6 relative z-10" :class="zoomGridClass">
+                                    <template x-for="item in getPersonalItemsByMember(member.id)" :key="item.id">
+                                        <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
+                                            <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-blue-400/50' : 'border-blue-400')">
+                                                <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover">
+                                                <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                                
+                                                <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
+                                                    <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-col items-center w-full leading-tight px-1">
+                                                <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-blue-300' : 'text-blue-600']">
+                                                    <span x-text="item.id"></span>
+                                                    <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
+                                                </span>
+                                                <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')]" x-text="cleanName(item.name)"></span>
+                                                <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <template x-if="getPersonalItemsByMember(member.id).length === 0">
+                                <div class="w-full py-8 text-center font-bold text-base sm:text-lg relative z-10 transition-colors duration-300" :class="isDarkMode ? 'text-blue-300/30' : 'text-blue-500/40'">
+                                    현재 등록된 개인 시그니처가 없습니다.
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <div x-show="getUnassignedPersonalItems().length > 0" class="border rounded-xl p-4 sm:p-6 shadow-lg transition-colors duration-300" :class="isDarkMode ? 'bg-gray-800/80 border-gray-600' : 'bg-white border-gray-300'">
+                        <div class="flex items-center gap-3 mb-5 border-b pb-3 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-gray-600' : 'border-gray-300'">
+                            <i class="ph-fill ph-user text-gray-400 text-2xl"></i>
+                            <h2 class="text-xl sm:text-2xl font-bold transition-colors duration-300" :class="isDarkMode ? 'text-gray-300' : 'text-gray-800'">
+                                미지정 개인 시그니처
+                                <span class="text-base sm:text-lg font-bold ml-1" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" x-text="`(${getUnassignedPersonalItems().length}개)`"></span>
+                            </h2>
+                        </div>
+                        <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
+                            <template x-for="item in getUnassignedPersonalItems()" :key="item.id">
+                                <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="isItemVisible(item)">
+                                    <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
+                                        <img :src="item.imgUrl" loading="lazy" decoding="async" class="w-full h-full object-cover">
+                                        <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                        
+                                        <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
+                                            <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
+                                        </div>
+                                    </div>
+                                    <div class="flex flex-col items-center w-full leading-tight px-1">
+                                        <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-gray-400' : 'text-gray-600']">
+                                            <span x-text="item.id"></span>
+                                            <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
+                                        </span>
+                                        <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')]" x-text="cleanName(item.name)"></span>
+                                        <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-10 text-right text-sm font-bold tracking-wider border-t pt-4 avoid-break transition-colors duration-300" :class="isDarkMode ? 'text-gray-600 border-gray-800' : 'text-gray-400 border-gray-300'">
+                    Generated by Signature Manager Pro
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity" style="display: none;" @click="if($event.target === $el) closeGifModal()">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-[800px] max-w-[90vw] flex flex-col gap-6" @click.stop>
+            
+            <div class="flex justify-between items-center border-b pb-4 dark:border-gray-700">
+                <h2 class="text-2xl font-black text-gray-800 dark:text-white" x-text="modalItem ? `[ No.${modalItem.id} ] 썸네일 프레임 설정 스튜디오` : ''"></h2>
+                <button @click="closeGifModal()" class="text-gray-500 hover:text-red-500 transition">
+                    <i class="ph ph-x text-2xl"></i>
+                </button>
+            </div>
+            
+            <div id="modal_gif_container" class="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden min-h-[400px] relative">
+                <img x-show="!gifInstance" id="modal_img_preview" :src="modalItem?.imgUrl" class="w-full max-h-[50vh] object-contain">
+                <div x-show="isGifLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white z-10">
+                    <i class="ph ph-spinner animate-spin text-4xl mb-2"></i>
+                    <span class="font-bold">고화질 GIF 디코딩 중...</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-4">
+                <div x-show="gifInstance && !modalItem?.isFrozen" class="w-full bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex flex-col gap-2">
+                    <div class="flex items-center gap-4">
+                        <button @click="togglePlay()" class="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 transition shadow">
+                            <i class="text-xl" :class="isPlaying ? 'ph-fill ph-pause' : 'ph-fill ph-play'"></i>
+                        </button>
+                        <input type="range" x-model="gifCurrentFrame" min="0" :max="gifTotalFrames > 0 ? gifTotalFrames - 1 : 0" @input="scrubGif()" class="flex-1 accent-blue-600 cursor-pointer" :disabled="gifTotalFrames === 0">
+                        <span class="text-sm font-bold w-12 text-right dark:text-gray-300" x-text="`${gifCurrentFrame}/${gifTotalFrames > 0 ? gifTotalFrames - 1 : 0}`"></span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 text-center font-bold">바를 좌우로 드래그하여 가장 마음에 드는 장면을 찾아 캡처하세요!</p>
+                </div>
+
+                <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex-wrap gap-2">
+                    <div class="text-sm font-bold text-gray-600 dark:text-gray-300">
+                        <span x-show="modalItem && modalItem.isFrozen" class="text-blue-600 dark:text-blue-400 flex items-center gap-1"><i class="ph-fill ph-check-circle text-lg"></i> 프레임 캡처 완료! (고정됨)</span>
+                        <span x-show="modalItem && !modalItem.isFrozen" class="text-orange-500 flex items-center gap-1"><i class="ph-fill ph-film-strip text-lg"></i> 프레임 선택 모드</span>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <button x-show="modalItem && modalItem.isFrozen" @click="downloadCurrentModalFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            <i class="ph-fill ph-download-simple"></i> 다운로드
+                        </button>
+                        
+                        <button x-show="modalItem && modalItem.isFrozen" @click="resetModalFrame()" class="bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            <i class="ph-fill ph-play"></i> 고정 풀기
+                        </button>
+                        <button x-show="modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            <i class="ph-fill ph-camera"></i> 현재 프레임 캡처
+                        </button>
+                        <button @click="closeGifModal()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                            닫기
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="toastMessage" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform translate-y-10"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform translate-y-0"
+         x-transition:leave-end="opacity-0 transform translate-y-10"
+         class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-6 py-3 rounded-full shadow-2xl z-[100] font-bold tracking-wide flex items-center gap-3 backdrop-blur-md border border-gray-700" 
+         style="display: none;">
+        <i class="ph-fill ph-info text-blue-400 text-xl"></i>
+        <span x-text="toastMessage"></span>
+    </div>
+
+</body>
+</html>
