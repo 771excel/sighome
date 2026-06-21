@@ -1,10 +1,7 @@
-// Firebase 모듈 직접 Import (이 부분은 ES Module 규격이므로 반드시 type="module"이 필요합니다)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-// [핵심 픽스] Alpine.js가 DOM을 그리기 직전(alpine:init)에만 맞춰서 데이터를 주입합니다.
-// ESM 404 차단 이슈 및 Race Condition을 동시에 해결한 최종 형태입니다.
 document.addEventListener('alpine:init', () => {
     Alpine.data('signatureApp', () => ({
         lastModified: '',
@@ -197,15 +194,26 @@ document.addEventListener('alpine:init', () => {
                         await signInAnonymously(auth);
                     }
                 } catch (err) {
-                    try { await signInAnonymously(auth); } catch (err2) { console.error(err2); }
+                    try { 
+                        await signInAnonymously(auth); 
+                    } catch (err2) { 
+                        console.error(err2); 
+                        // 파이어베이스 인증(도메인 승인) 에러일 경우 강력하게 알림
+                        if(err2.code === 'auth/unauthorized-domain') {
+                            this.showToast("🚨 에러: Firebase Auth '승인된 도메인'에 깃허브 주소를 추가해주세요!");
+                        } else {
+                            this.showToast("인증 실패: " + err2.message);
+                        }
+                    }
                 }
 
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         this.userId = user.uid;
-                        this.loadCloudData(); 
+                        if(!this._unsubscribe) this.loadCloudData(); // 중복 리스너 방지
                     } else {
                         this.userId = null;
+                        if(this._unsubscribe) { this._unsubscribe(); this._unsubscribe = null; }
                     }
                 });
             } catch(e) {
@@ -214,7 +222,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         loadCloudData() {
-            if (!this.db || !this.userId || this._unsubscribe) return; 
+            if (!this.db || !this.userId) return; 
             
             const configDoc = doc(this.db, 'artifacts', this.appId, 'public', 'data', 'signature_boards', 'main_board');
 
@@ -228,14 +236,17 @@ document.addEventListener('alpine:init', () => {
                     if(data.events) this.events = data.events;
                     
                     if(data.itemConfigs) {
+                        // [핵심 픽스] Object.assign 대신 배열 자체를 교체하여 Alpine.js Reactivity(반응성) 확보
+                        let updatedItems = [...this.items];
+                        
                         data.itemConfigs.forEach(conf => {
-                            const existingItem = this.items.find(i => i.id === conf.id);
-                            if(existingItem) {
-                                Object.assign(existingItem, conf);
-                                if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
-                                else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
+                            let idx = updatedItems.findIndex(i => i.id === conf.id);
+                            if(idx !== -1) {
+                                updatedItems[idx] = { ...updatedItems[idx], ...conf };
+                                if (conf.isFrozen && conf.frozenDataUrl) updatedItems[idx].imgUrl = conf.frozenDataUrl;
+                                else if (conf.mediaUrl) updatedItems[idx].imgUrl = conf.mediaUrl;
                             } else {
-                                this.items.push({
+                                updatedItems.push({
                                     ...conf,
                                     imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
                                     hasAudio: conf.hasAudio || !!conf.audioUrl,
@@ -245,14 +256,15 @@ document.addEventListener('alpine:init', () => {
                                 });
                             }
                         });
-                        this.items.sort((a, b) => a.id - b.id);
+                        updatedItems.sort((a, b) => a.id - b.id);
+                        this.items = updatedItems; // 통째로 할당해야 화면이 강제 업데이트됨
                     }
 
                     this.reassignGroups();
                     setTimeout(() => { this.isSyncing = false; }, 100);
                 }
             }, (error) => {
-                if (error.code === 'permission-denied') this.showToast("에러: 파이어베이스의 권한이 막혀있습니다.");
+                if (error.code === 'permission-denied') this.showToast("에러: 파이어베이스 Firestore 데이터베이스 권한이 막혀있습니다.");
             });
         },
 
@@ -273,7 +285,17 @@ document.addEventListener('alpine:init', () => {
                 members: JSON.parse(JSON.stringify(this.members)),
                 events: JSON.parse(JSON.stringify(this.events)),
                 itemConfigs: itemConfigs
-            }, {merge: true}).catch(e => { this.showToast("저장 실패: 권한을 확인해주세요."); });
+            }, {merge: true}).catch(e => { 
+                console.error(e);
+                // [핵심 픽스] 용량 초과 에러(1MB)인지 권한 에러인지 사용자에게 명확히 고지
+                if (e.code === 'resource-exhausted' || e.message.includes('exceeds')) {
+                    this.showToast("🚨 저장 실패: 파이어베이스 용량 초과(1MB). 캡처된 이미지를 줄이세요.");
+                } else if (e.code === 'permission-denied') {
+                    this.showToast("🚨 저장 실패: 파이어베이스 데이터베이스 쓰기 권한이 없습니다.");
+                } else {
+                    this.showToast("저장 실패: " + e.message); 
+                }
+            });
         },
 
         async exportSettings() {
@@ -330,14 +352,15 @@ document.addEventListener('alpine:init', () => {
                     if(data.events) this.events = data.events;
                     if(data.members) this.members = data.members;
                     if(data.itemConfigs) {
+                        let updatedItems = [...this.items]; // Reactivity 픽스
                         data.itemConfigs.forEach(conf => {
-                            const existingItem = this.items.find(i => i.id === conf.id);
-                            if(existingItem) {
-                                Object.assign(existingItem, conf);
-                                if (conf.isFrozen && conf.frozenDataUrl) existingItem.imgUrl = conf.frozenDataUrl;
-                                else if (conf.mediaUrl) existingItem.imgUrl = conf.mediaUrl;
+                            let idx = updatedItems.findIndex(i => i.id === conf.id);
+                            if(idx !== -1) {
+                                updatedItems[idx] = { ...updatedItems[idx], ...conf };
+                                if (conf.isFrozen && conf.frozenDataUrl) updatedItems[idx].imgUrl = conf.frozenDataUrl;
+                                else if (conf.mediaUrl) updatedItems[idx].imgUrl = conf.mediaUrl;
                             } else {
-                                this.items.push({
+                                updatedItems.push({
                                     ...conf,
                                     imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
                                     hasAudio: conf.hasAudio || !!conf.audioUrl,
@@ -347,7 +370,8 @@ document.addEventListener('alpine:init', () => {
                                 });
                             }
                         });
-                        this.items.sort((a, b) => a.id - b.id);
+                        updatedItems.sort((a, b) => a.id - b.id);
+                        this.items = updatedItems;
                     }
                     this.reassignGroups(); this.saveCloudData();
                     this.showToast("설정이 성공적으로 복구되었습니다.");
