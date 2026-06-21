@@ -215,7 +215,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        loadCloudData() {
+loadCloudData() {
             if (!this.db || !this.userId) return; 
             
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
@@ -225,9 +225,6 @@ document.addEventListener('alpine:init', () => {
                     this.isSyncing = true;
                     const data = snapshot.data();
                     if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
-                    if(data.groups) this.groups = data.groups;
-                    if(data.members) this.members = data.members;
-                    if(data.events) this.events = data.events;
                     
                     if(data.itemConfigs) {
                         let updatedItems = [...this.items];
@@ -235,30 +232,57 @@ document.addEventListener('alpine:init', () => {
                         data.itemConfigs.forEach(conf => {
                             let idx = updatedItems.findIndex(i => i.id === conf.id);
                             if(idx !== -1) {
-                                updatedItems[idx] = { ...updatedItems[idx], ...conf };
-                                if (conf.isFrozen && conf.frozenDataUrl) updatedItems[idx].imgUrl = conf.frozenDataUrl;
-                                else if (conf.mediaUrl) updatedItems[idx].imgUrl = conf.mediaUrl;
+                                // [중요 수정] 데이터가 깨졌는지 체크하고, 깨졌으면 원본 url로 복구
+                                let isBroken = conf.isFrozen && (!conf.frozenDataUrl || conf.frozenDataUrl.length < 100);
+                                
+                                updatedItems[idx] = { 
+                                    ...updatedItems[idx], 
+                                    ...conf,
+                                    isFrozen: isBroken ? false : conf.isFrozen,
+                                    imgUrl: (conf.isFrozen && !isBroken) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage())
+                                };
                             } else {
                                 updatedItems.push({
                                     ...conf,
-                                    imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
-                                    hasAudio: conf.hasAudio || !!conf.audioUrl,
-                                    hasImage: conf.hasImage || !!conf.mediaUrl,
-                                    isGif: conf.isGif || false,
-                                    originalGifUrl: conf.originalGifUrl || ''
+                                    imgUrl: (conf.isFrozen) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage())
                                 });
                             }
                         });
                         updatedItems.sort((a, b) => a.id - b.id);
-                        this.items = updatedItems; 
+                        this.items = updatedItems;
                     }
-
                     this.reassignGroups();
                     setTimeout(() => { this.isSyncing = false; }, 100);
                 }
-            }, (error) => {
-                if (error.code === 'permission-denied') this.showToast("에러: 파이어베이스 데이터베이스 권한이 막혀있습니다.");
             });
+        },
+
+        // [중요] 불러오기 시에도 깨진 이미지 체크
+        async importSettings(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = async (event) => { 
+                try {
+                    const data = JSON.parse(event.target.result);
+                    // ... (기타 설정 불러오기 동일)
+                    if(data.itemConfigs) {
+                        let updatedItems = []; 
+                        for (let conf of data.itemConfigs) {
+                            // 데이터가 비정상적으로 짧으면 고정 해제하여 원본 URL(mediaUrl) 사용 유도
+                            if (conf.isFrozen && (!conf.frozenDataUrl || conf.frozenDataUrl.length < 100)) {
+                                conf.isFrozen = false;
+                            }
+                            // ... (기존 로직) ...
+                            updatedItems.push({ ...conf, imgUrl: conf.isFrozen ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()) });
+                        }
+                        this.items = updatedItems;
+                    }
+                    this.saveCloudData();
+                    this.showToast("복구 및 이미지 최적화가 완료되었습니다.");
+                } catch(err) { this.showToast("파일 분석 오류"); }
+            };
+            reader.readAsText(file);
         },
 
         compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
