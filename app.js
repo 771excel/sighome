@@ -63,12 +63,12 @@ document.addEventListener('alpine:init', () => {
             return maps[this.zoomLevel] || maps[3];
         },
         get zoomTextClassId() {
-            if (!this.isViewerMode) return 'text-xs md:text-sm';
+            if (!this.isViewerMode) return 'text-lg md:text-xl';
             const maps = { 1: 'text-[10px] md:text-xs', 2: 'text-xs md:text-sm', 3: 'text-sm md:text-base', 4: 'text-base md:text-lg', 5: 'text-lg md:text-xl' };
             return maps[this.zoomLevel] || maps[3];
         },
         get zoomTextClassName() {
-            if (!this.isViewerMode) return 'text-sm md:text-base';
+            if (!this.isViewerMode) return 'text-lg md:text-xl';
             const maps = { 1: 'text-xs md:text-sm', 2: 'text-sm md:text-base', 3: 'text-base md:text-lg', 4: 'text-lg md:text-xl', 5: 'text-xl md:text-2xl' };
             return maps[this.zoomLevel] || maps[3];
         },
