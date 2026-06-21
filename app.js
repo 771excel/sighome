@@ -476,7 +476,7 @@ document.addEventListener('alpine:init', () => {
             return canvas.toDataURL('image/png');
         },
 
-        handleFolderUpload(e) {
+handleFolderUpload(e) {
             const files = e.target.files;
             let tempMap = {}; 
 
@@ -503,12 +503,14 @@ document.addEventListener('alpine:init', () => {
                 const targetGroupId = this.findGroupForId(parseInt(id)); 
 
                 if (existingItem) {
+                    // [수정됨] 기존 항목에 이미 썸네일이 고정(isFrozen)되어 있다면, 새 파일이 들어와도 덮어쓰지 않음
                     if (tempMap[id].imgUrl) {
                         if (existingItem.isFrozen && existingItem.frozenDataUrl) {
+                            // 이미 썸네일이 고정되어 있으므로 원본 주소만 업데이트하고 이미지는 유지
                             existingItem.originalGifUrl = tempMap[id].imgUrl;
-                            existingItem.imgUrl = existingItem.frozenDataUrl; 
                             existingItem.isGif = tempMap[id].isGif;
                         } else {
+                            // 고정된 게 없으면 새 파일로 갱신
                             existingItem.imgUrl = tempMap[id].imgUrl;
                             existingItem.isGif = tempMap[id].isGif;
                             existingItem.isFrozen = false;
