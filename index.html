@@ -71,6 +71,31 @@
                 detailFilter: 'all',
                 searchQuery: '', 
                 
+                zoomLevel: 3,
+                zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
+                zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
+                get zoomGridClass() {
+                    if (!this.isViewerMode) return 'grid-cols-5';
+                    const maps = {
+                        1: 'grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
+                        2: 'grid-cols-5 md:grid-cols-7 lg:grid-cols-8',
+                        3: 'grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
+                        4: 'grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
+                        5: 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+                    };
+                    return maps[this.zoomLevel] || maps[3];
+                },
+                get zoomTextClassId() {
+                    if (!this.isViewerMode) return 'text-sm';
+                    const maps = { 1: 'text-xs', 2: 'text-sm', 3: 'text-base', 4: 'text-lg', 5: 'text-xl' };
+                    return maps[this.zoomLevel] || maps[3];
+                },
+                get zoomTextClassName() {
+                    if (!this.isViewerMode) return 'text-base';
+                    const maps = { 1: 'text-sm', 2: 'text-base', 3: 'text-lg', 4: 'text-xl', 5: 'text-2xl' };
+                    return maps[this.zoomLevel] || maps[3];
+                },
+                
                 groups: [{ id: 'g_default', name: '기본 목록 (미분류)', start: null, end: null, color: '#6B7280' }],
                 events: [], 
                 members: [], 
@@ -1028,7 +1053,8 @@
     <header class="bg-white shadow-sm h-16 flex items-center justify-between px-6 shrink-0 z-10 select-none border-b">
         <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
-                <i class="ph-fill ph-magic-wand text-blue-600 text-2xl"></i>
+                <img src="logo.png" alt="771 Logo" class="h-8 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <i class="ph-fill ph-magic-wand text-blue-600 text-2xl" style="display: none;"></i>
                 <h1 class="font-bold text-xl">771 시그니처 뷰어</h1>
                 <!-- 클라우드 동기화 상태 표시기 복구 -->
                 <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-2" x-show="isSyncing">클라우드 동기화 됨</span>
@@ -1045,6 +1071,17 @@
             </button>
         </div>
         <div class="flex items-center gap-3">
+            <!-- 뷰어 줌 컨트롤러 -->
+            <div x-show="isViewerMode" class="flex items-center bg-gray-100 rounded-lg p-1 mr-2 shadow-sm border border-gray-200" title="화면 확대/축소">
+                <button @click="zoomOut()" class="w-7 h-7 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel <= 1">
+                    <i class="ph ph-minus font-bold"></i>
+                </button>
+                <span class="text-xs font-bold w-12 text-center text-gray-700" x-text="['50%', '75%', '100%', '125%', '150%'][zoomLevel - 1]"></span>
+                <button @click="zoomIn()" class="w-7 h-7 flex items-center justify-center rounded bg-white hover:bg-gray-200 text-gray-700 shadow-sm transition disabled:opacity-30 disabled:cursor-not-allowed" :disabled="zoomLevel >= 5">
+                    <i class="ph ph-plus font-bold"></i>
+                </button>
+            </div>
+
             <!-- 뷰어 모드 전용 보드 내 검색창 -->
             <div x-show="isViewerMode" class="relative mr-4">
                 <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
@@ -1406,7 +1443,7 @@
                                     <span class="text-lg font-bold text-white/80 drop-shadow-md" x-text="`(${getEventItems(event.targets).length}개)`"></span>
                                 </div>
                                 <div class="p-6 border-x border-b rounded-b-xl transition-colors duration-300" :class="isDarkMode ? 'bg-[#1f2937] border-gray-700' : 'bg-white border-gray-300'">
-                                    <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                                    <div class="grid gap-6" :class="zoomGridClass">
                                         <template x-for="item in getEventItems(event.targets)" :key="item.id">
                                             <div class="flex flex-col items-center gap-3 w-full avoid-break">
                                                 <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" 
@@ -1420,11 +1457,11 @@
                                                     </div>
                                                 </div>
                                                 <div class="flex flex-col items-center w-full leading-tight">
-                                                    <span class="text-sm font-black text-orange-500 mb-0.5 flex items-center gap-1">
+                                                    <span class="font-black text-orange-500 mb-0.5 flex items-center gap-1 transition-all" :class="zoomTextClassId">
                                                         <span x-text="item.id"></span>
                                                         <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                     </span>
-                                                    <span class="text-base font-bold text-center break-words w-full tracking-tight" :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')" x-text="cleanName(item.name)"></span>
+                                                    <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')]" x-text="cleanName(item.name)"></span>
                                                     <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                                 </div>
                                             </div>
@@ -1450,7 +1487,7 @@
                                 </span>
                             </h2>
                             
-                            <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                            <div class="grid gap-6" :class="zoomGridClass">
                                 <template x-for="item in getItemsByGroup(group.id)" :key="item.id">
                                     <!-- 뷰어 모드일 때 검색어 필터링 적용 -->
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
@@ -1465,12 +1502,12 @@
                                             </div>
                                         </div>
                                         <div class="flex flex-col items-center w-full leading-tight">
-                                            <span class="text-sm font-black text-blue-500 mb-0.5 flex items-center gap-1">
+                                            <span class="font-black text-blue-500 mb-0.5 flex items-center gap-1 transition-all" :class="zoomTextClassId">
                                                 <span x-text="item.id"></span>
                                                 <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                             </span>
-                                            <span class="text-base font-bold text-center break-words w-full tracking-tight transition-colors duration-300" 
-                                                  :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')" 
+                                            <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" 
+                                                  :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')]" 
                                                   x-text="cleanName(item.name)"></span>
                                             <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                         </div>
@@ -1496,7 +1533,7 @@
                             </div>
                             
                             <template x-if="getPersonalItemsByMember(member.id).length > 0">
-                                <div class="grid gap-6 relative z-10" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                                <div class="grid gap-6 relative z-10" :class="zoomGridClass">
                                     <template x-for="item in getPersonalItemsByMember(member.id)" :key="item.id">
                                         <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                             <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-blue-400/50' : 'border-blue-400')">
@@ -1508,11 +1545,11 @@
                                                 </div>
                                             </div>
                                             <div class="flex flex-col items-center w-full leading-tight">
-                                                <span class="text-sm font-black mb-0.5 transition-colors duration-300 flex items-center gap-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">
+                                                <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-blue-300' : 'text-blue-600']">
                                                     <span x-text="item.id"></span>
                                                     <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                 </span>
-                                                <span class="text-base font-bold text-center break-words w-full transition-colors duration-300" :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')" x-text="cleanName(item.name)"></span>
+                                                <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')]" x-text="cleanName(item.name)"></span>
                                                 <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                             </div>
                                         </div>
@@ -1536,7 +1573,7 @@
                                 <span class="text-base font-bold ml-1" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" x-text="`(${getUnassignedPersonalItems().length}개)`"></span>
                             </h2>
                         </div>
-                        <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
+                        <div class="grid gap-6" :class="zoomGridClass">
                             <template x-for="item in getUnassignedPersonalItems()" :key="item.id">
                                 <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
@@ -1548,11 +1585,11 @@
                                         </div>
                                     </div>
                                     <div class="flex flex-col items-center w-full leading-tight">
-                                        <span class="text-sm font-black mb-0.5 transition-colors duration-300 flex items-center gap-1" :class="isDarkMode ? 'text-gray-400' : 'text-gray-600'">
+                                        <span class="font-black mb-0.5 transition-all duration-300 flex items-center gap-1" :class="[zoomTextClassId, isDarkMode ? 'text-gray-400' : 'text-gray-600']">
                                             <span x-text="item.id"></span>
                                             <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                         </span>
-                                        <span class="text-base font-bold text-center break-words w-full transition-colors duration-300" :class="item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')" x-text="cleanName(item.name)"></span>
+                                        <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')]" x-text="cleanName(item.name)"></span>
                                         <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                     </div>
                                 </div>
