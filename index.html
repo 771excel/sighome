@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그니처 보드 생성기</title>
+    <title>771 시그니처 뷰어</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -822,6 +822,25 @@
 
                 cleanName(name) { return name.replace(/^[\d_.\s]+/, ''); },
 
+                // 뷰어 전용 모드 링크 복사
+                copyViewerLink() {
+                    const url = window.location.origin + window.location.pathname + '?viewer=true';
+                    const textArea = document.createElement("textarea");
+                    textArea.value = url;
+                    textArea.style.position = "fixed";
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        alert('뷰어 전용 링크가 복사되었습니다!\n게시판이나 HTML 연동에 이 링크를 붙여넣으세요.\n\n복사된 링크: ' + url);
+                    } catch (err) {
+                        console.error('Fallback: Oops, unable to copy', err);
+                        alert('링크 복사에 실패했습니다. 아래 주소를 수동으로 복사해주세요:\n' + url);
+                    }
+                    document.body.removeChild(textArea);
+                },
+
                 // 엑셀 다운로드 
                 async exportExcel() {
                     if(this.items.length === 0) {
@@ -1011,9 +1030,14 @@
         <div class="flex items-center gap-4">
             <div class="flex items-center gap-2">
                 <i class="ph-fill ph-magic-wand text-blue-600 text-2xl"></i>
-                <h1 class="font-bold text-xl">시그니처 보드 매니저 Pro</h1>
+                <h1 class="font-bold text-xl">771 시그니처 뷰어</h1>
                 <!-- 클라우드 동기화 상태 표시기 복구 -->
                 <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold ml-2" x-show="isSyncing">클라우드 동기화 됨</span>
+                
+                <!-- 뷰어 링크 복사 버튼 (관리자에게만 보임) -->
+                <button x-show="!isViewerMode" @click="copyViewerLink()" class="ml-2 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-colors shadow-sm" title="HTML이나 게시글에 공유할 링크 발급">
+                    <i class="ph ph-link text-sm"></i> 뷰어 링크 발급
+                </button>
             </div>
             <!-- 다크모드 / 라이트모드 토글 버튼 -->
             <button @click="isDarkMode = !isDarkMode; saveCloudData()" class="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors ml-4 text-gray-600" title="테마 변경">
@@ -1364,7 +1388,10 @@
                 
                 <!-- 보드 헤더 -->
                 <div class="flex justify-between items-end border-b-4 pb-5 mb-8 avoid-break" :class="isDarkMode ? 'border-gray-700' : 'border-gray-300'">
-                    <h1 class="text-5xl font-black tracking-tighter" :class="isDarkMode ? 'text-white' : 'text-gray-900'"><span class="text-blue-600">771 EXCEL</span> 시그니처 목록</h1>
+                    <h1 class="text-5xl font-black tracking-tighter" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
+                        <span class="text-blue-600">771 EXCEL</span> 시그니처 목록
+                        <span class="text-2xl font-bold ml-3 align-middle tracking-normal" :class="isDarkMode ? 'text-gray-400' : 'text-gray-500'" x-text="`총 ${items.length}개`"></span>
+                    </h1>
                     <div class="font-bold tracking-widest text-lg px-4 py-1 rounded-full" :class="isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-200 text-gray-600'">
                         UPDATE <span class="ml-2" :class="isDarkMode ? 'text-white' : 'text-gray-900'" x-text="lastModified"></span>
                     </div>
@@ -1375,8 +1402,9 @@
                     <div class="mb-10 space-y-6">
                         <template x-for="event in events" :key="event.id">
                             <div class="w-full" x-show="getEventItems(event.targets).length > 0">
-                                <div class="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 p-4 rounded-t-xl shadow-lg avoid-break">
-                                    <h2 class="text-2xl font-black text-white tracking-widest text-center drop-shadow-md" x-text="event.title"></h2>
+                                <div class="bg-gradient-to-r from-red-600 via-orange-500 to-yellow-500 p-4 rounded-t-xl shadow-lg avoid-break flex justify-center items-center gap-2">
+                                    <h2 class="text-2xl font-black text-white tracking-widest drop-shadow-md" x-text="event.title"></h2>
+                                    <span class="text-lg font-bold text-white/80 drop-shadow-md" x-text="`(${getEventItems(event.targets).length}개)`"></span>
                                 </div>
                                 <div class="p-6 border-x border-b rounded-b-xl transition-colors duration-300" :class="isDarkMode ? 'bg-[#1f2937] border-gray-700' : 'bg-white border-gray-300'">
                                     <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
@@ -1412,11 +1440,15 @@
                 <!-- 자동 분류 그룹 리스트 영역 -->
                 <div class="space-y-12">
                     <template x-for="group in groups" :key="group.id">
+                        <!-- 미분류 포함 모든 그룹은 항목이 0개면 아예 표시되지 않음 -->
                         <div x-show="getItemsByGroup(group.id).length > 0" class="rounded-xl p-6 border shadow-lg transition-colors duration-300 relative overflow-hidden" :class="isDarkMode ? 'bg-panel border-gray-800' : 'bg-white border-gray-200'" :style="`border-top-width: 5px; border-top-color: ${group.color || '#6B7280'};`">
                             
                             <h2 class="text-2xl font-black mb-5 border-b-2 pb-3 avoid-break flex items-center gap-3 transition-colors duration-300" :class="isDarkMode ? 'text-gray-100 border-gray-700' : 'text-gray-800 border-gray-200'">
                                 <span class="w-4 h-4 rounded-full inline-block shadow-sm" :style="`background-color: ${group.color || '#6B7280'};`"></span>
-                                <span x-text="group.name"></span>
+                                <span>
+                                    <span x-text="group.name"></span>
+                                    <span class="text-lg font-bold ml-1" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" x-text="`(${getItemsByGroup(group.id).length}개)`"></span>
+                                </span>
                             </h2>
                             
                             <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
@@ -1457,7 +1489,11 @@
                             <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
                             <div class="flex items-center gap-3 mb-5 border-b pb-3 relative z-10 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-blue-500/30' : 'border-blue-300'">
                                 <i class="ph-fill ph-crown text-blue-500 text-3xl"></i>
-                                <h2 class="text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-blue-100' : 'text-blue-900'"><span x-text="member.name"></span> <span class="text-lg font-medium ml-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">개인 시그니처</span></h2>
+                                <h2 class="text-2xl font-black transition-colors duration-300" :class="isDarkMode ? 'text-blue-100' : 'text-blue-900'">
+                                    <span x-text="member.name"></span> 
+                                    <span class="text-lg font-medium ml-1" :class="isDarkMode ? 'text-blue-300' : 'text-blue-600'">개인 시그니처</span>
+                                    <span class="text-lg font-bold ml-1" :class="isDarkMode ? 'text-blue-400/70' : 'text-blue-400'" x-text="`(${getPersonalItemsByMember(member.id).length}개)`"></span>
+                                </h2>
                             </div>
                             
                             <template x-if="getPersonalItemsByMember(member.id).length > 0">
@@ -1496,7 +1532,10 @@
                     <div x-show="getUnassignedPersonalItems().length > 0" class="border rounded-xl p-6 shadow-lg transition-colors duration-300" :class="isDarkMode ? 'bg-gray-800/80 border-gray-600' : 'bg-white border-gray-300'">
                         <div class="flex items-center gap-3 mb-5 border-b pb-3 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-gray-600' : 'border-gray-300'">
                             <i class="ph-fill ph-user text-gray-400 text-2xl"></i>
-                            <h2 class="text-xl font-bold transition-colors duration-300" :class="isDarkMode ? 'text-gray-300' : 'text-gray-800'">미지정 개인 시그니처</h2>
+                            <h2 class="text-xl font-bold transition-colors duration-300" :class="isDarkMode ? 'text-gray-300' : 'text-gray-800'">
+                                미지정 개인 시그니처
+                                <span class="text-base font-bold ml-1" :class="isDarkMode ? 'text-gray-500' : 'text-gray-400'" x-text="`(${getUnassignedPersonalItems().length}개)`"></span>
+                            </h2>
                         </div>
                         <div class="grid gap-6" :class="isViewerMode ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8' : 'grid-cols-5'">
                             <template x-for="item in getUnassignedPersonalItems()" :key="item.id">
