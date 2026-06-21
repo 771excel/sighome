@@ -69,7 +69,6 @@
                 detailFilter: 'all',
                 searchQuery: '', 
 
-                // [버그 수정] 이름이 없는 과거 데이터로 인한 뷰어 모드 크래시 방지 안전 함수
                 isItemVisible(item) {
                     if (!this.isViewerMode) return true;
                     if (!this.searchQuery) return true;
@@ -419,7 +418,13 @@
                     const files = e.target.files;
                     let tempMap = {}; 
 
+                    // [핵심 버그 수정] 브라우저 GC(가비지 컬렉션) 방지 로직
+                    // 원본 File 객체가 메모리에서 삭제되어 생성된 Blob URL이 엑스박스나 끊김 현상으로 변하는 것을 방지합니다.
+                    if (!window.localFileCache) window.localFileCache = [];
+
                     for (let file of files) {
+                        window.localFileCache.push(file); // 메모리에 파일을 강제로 쥐어주기 (GC 방지)
+
                         const match = file.name.match(/^(\d+)/);
                         if (!match) continue;
                         
@@ -485,7 +490,7 @@
                     this.items.sort((a, b) => a.id - b.id);
                     e.target.value = '';
                     this.saveCloudData(); 
-                    this.showToast("폴더 파일이 성공적으로 업로드되었습니다.");
+                    this.showToast("로컬 폴더 파일이 안전하게 업로드되었습니다.");
                 },
 
                 autoLinkWebAssets() {
@@ -567,7 +572,6 @@
                                 if (url2) urls.push(url2);
 
                                 urls.forEach(url => {
-                                    // [보안 우회] HTTP 링크를 강제 HTTPS로 변환하여 Mixed Content 방지
                                     url = url.replace(/^http:\/\//i, 'https://');
                                     
                                     if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/i.test(url)) {
@@ -1099,7 +1103,6 @@
         ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
         [x-cloak] { display: none !important; }
         .sortable-ghost { opacity: 0.4; background-color: #f9fafb; }
-        /* GIF 캔버스 크기 제어 */
         #modal_gif_container canvas { max-width: 100%; max-height: 50vh; object-fit: contain; margin: 0 auto; border-radius: 0.5rem; }
     </style>
 </head>
