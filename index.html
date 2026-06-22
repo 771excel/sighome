@@ -605,7 +605,10 @@
             </div>
             
             <div id="modal_gif_container" class="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden min-h-[400px] relative">
-                <img x-show="!gifInstance" id="modal_img_preview" :src="modalItem?.imgUrl" class="w-full max-h-[50vh] object-contain">
+                <img x-show="!isGifReady" id="modal_img_preview" :src="modalItem?.imgUrl" class="w-full max-h-[50vh] object-contain">
+                
+                <div id="supergif_wrapper" class="w-full flex justify-center" x-show="isGifReady"></div>
+                
                 <div x-show="isGifLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white z-10">
                     <i class="ph ph-spinner animate-spin text-4xl mb-2"></i>
                     <span class="font-bold">고화질 GIF 디코딩 중...</span>
@@ -613,7 +616,7 @@
             </div>
 
             <div class="flex flex-col gap-4">
-                <div x-show="gifInstance && !modalItem?.isFrozen" class="w-full bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex flex-col gap-2">
+                <div x-show="isGifReady && !modalItem?.isFrozen" class="w-full bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex flex-col gap-2">
                     <div class="flex items-center gap-2 sm:gap-4">
                         <button @click="stepFrame(-1)" class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition shadow" title="이전 프레임 (-1)">
                             <i class="ph-fill ph-caret-left text-xl"></i>
@@ -643,7 +646,7 @@
                         <button x-show="modalItem && modalItem.isFrozen" @click="resetModalFrame()" class="bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             <i class="ph-fill ph-play"></i> 고정 풀기
                         </button>
-                        <button x-show="modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
+                        <button x-show="!isGifLoading && modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             <i class="ph-fill ph-camera"></i> 현재 프레임 캡처
                         </button>
                         <button @click="closeGifModal()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
