@@ -40,7 +40,7 @@ document.addEventListener('alpine:init', () => {
         newEventTargets: '',
         newMemberName: '',
         
-        // [추가됨] 개별 링크 추가용 변수 탭 상태 및 입력값
+        // [추가됨] 개별 링크 추가용 UI 탭 상태 및 폼 데이터
         activeAddTab: 'folder',
         newSigId: '',
         newSigName: '',
@@ -54,18 +54,20 @@ document.addEventListener('alpine:init', () => {
         detailFilter: 'all',
         searchQuery: '', 
         
-        zoomLevel: 3,
+        // [수정됨] PC 기본 배율을 125%(4)로 세팅
+        zoomLevel: window.innerWidth >= 1024 ? 4 : 3,
         zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
         zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
         
+        // [수정됨] 모바일 최적화를 위해 grid-cols 수를 유동적으로 상향 조정 (모바일에서 3줄 보이게)
         get zoomGridClass() {
-            if (!this.isViewerMode) return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5';
+            if (!this.isViewerMode) return 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
             const maps = {
-                1: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
-                2: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-8',
-                3: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
-                4: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5',
-                5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+                1: 'grid-cols-5 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-11',
+                2: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
+                3: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8',
+                4: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6', // 모바일에서 3열
+                5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
             };
             return maps[this.zoomLevel] || maps[3];
         },
@@ -106,33 +108,53 @@ document.addEventListener('alpine:init', () => {
             return url.replace(/^http:\/\//i, 'https://');
         },
 
-        // [추가됨] 붙여넣은 외부링크에서 단가/이름 자동 추출
-        autoParseLink(url) {
-            if (!url) return;
-            try {
-                let decoded = decodeURI(url);
-                let parts = decoded.split('/');
-                let filenameWithQuery = parts[parts.length - 1];
-                let filename = filenameWithQuery.split('?')[0];
-                
-                const match = filename.match(/^(\d+)[_.\-\s]+(.*?)(?:\.[a-zA-Z0-9]+)?$/);
-                if (match) {
-                    if (!this.newSigId) this.newSigId = match[1];
-                    if (!this.newSigName && match[2]) this.newSigName = match[2].trim();
-                } else {
-                    const matchIdOnly = filename.match(/^(\d+)(?:\.[a-zA-Z0-9]+)?$/);
-                    if (matchIdOnly) {
-                        if (!this.newSigId) this.newSigId = matchIdOnly[1];
-                    }
-                }
-            } catch (e) {}
+        // [추가됨] 붙여넣은 외부링크 파일명에서 단가(번호)와 이름 자동 추출하는 엔진
+        autoParseLink() {
+            let audioUrl = this.newSigAudio.trim();
+            let mediaUrl = this.newSigMedia.trim();
+
+            let bestId = '';
+            let bestName = '';
+
+            const extract = (url) => {
+                if(!url) return null;
+                try {
+                    let decoded = decodeURI(url);
+                    let filename = decoded.split('/').pop().split('?')[0];
+                    // 정규식 1: "1000 10개.mp3" 형태 (숫자와 이름 모두 분리)
+                    const match = filename.match(/^(\d+)[_.\-\s]+(.*?)(?:\.[a-zA-Z0-9]+)?$/);
+                    if (match) return { id: match[1], name: match[2].trim() };
+                    // 정규식 2: "1000.png" 형태 (숫자만 존재)
+                    const matchId = filename.match(/^(\d+)(?:\.[a-zA-Z0-9]+)?$/);
+                    if (matchId) return { id: matchId[1], name: '' };
+                } catch(e) {}
+                return null;
+            };
+
+            let aData = extract(audioUrl);
+            let mData = extract(mediaUrl);
+
+            // 음원 파일의 이름이 더 정확하므로 우선권 부여
+            if (aData && aData.id) {
+                bestId = aData.id;
+                if (aData.name) bestName = aData.name;
+            }
+            // 미디어(이미지) 링크에서 보조 추출
+            if (mData && mData.id) {
+                if (!bestId) bestId = mData.id; 
+                if (!bestName && mData.name) bestName = mData.name; 
+            }
+
+            // 추출된 정보를 빈칸에만 채워줌 (사용자가 수정한 이름 덮어쓰기 방지)
+            if (bestId) this.newSigId = bestId;
+            if (bestName && !this.newSigName) this.newSigName = bestName;
         },
 
         // [추가됨] 개별 추가 등록 처리 로직
         async addIndividualSignature() {
             const id = parseInt(this.newSigId);
             if (isNaN(id) || id <= 0) {
-                this.showToast("단가(번호)를 정확히 입력해주세요.");
+                this.showToast("🚨 단가(번호)를 정확히 추출하거나 직접 입력해주세요.");
                 return;
             }
             
@@ -176,13 +198,14 @@ document.addEventListener('alpine:init', () => {
             }
             
             this.items.sort((a, b) => a.id - b.id);
-            await this.saveCloudData();
+            await this.saveCloudData(); // 안전하게 저장 완료 대기
             
+            // 입력 폼 리셋
             this.newSigId = '';
             this.newSigName = '';
             this.newSigMedia = '';
             this.newSigAudio = '';
-            this.showToast(`${id}번 시그니처가 성공적으로 반영되었습니다.`);
+            this.showToast(`✨ ${id}번 시그니처가 성공적으로 반영되었습니다.`);
         },
 
         updateMediaUrl(item) {
@@ -373,7 +396,7 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // [수정됨] JSON 파일이 확실하게 저장되도록 Promise 반환 및 에러 방어 로직 강화
+        // [수정됨] JSON 설정이 확실하게 저장되도록 Promise(await) 사용 및 방어 로직 강화
         async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
@@ -413,7 +436,7 @@ document.addEventListener('alpine:init', () => {
 
             let payloadStr = JSON.stringify(payloadObj);
 
-            // 1MB(1,048,576 byte) 한계를 피하기 위해 950KB를 마지노선으로 잡음
+            // 1MB 한계를 피하기 위해 950KB 마지노선 적용 및 보호
             if (new Blob([payloadStr]).size > 950000) {
                 this.showToast("🚨 용량 한계 도달! 일부 무거운 캡처 이미지를 해제하여 안전하게 저장합니다.");
                 
@@ -442,7 +465,7 @@ document.addEventListener('alpine:init', () => {
             }
 
             try {
-                // await를 사용하여 DB에 완전히 쓰일 때까지 기다림
+                // 완전히 서버에 쓰일 때까지 기다림 (새로고침 시 증발 방지)
                 await setDoc(configDoc, JSON.parse(payloadStr), {merge: true});
             } catch (e) {
                 console.error(e);
@@ -453,7 +476,7 @@ document.addEventListener('alpine:init', () => {
                 } else {
                     this.showToast("저장 실패: " + e.message); 
                 }
-                throw e; // 오류를 상위로 던져서 importSettings가 알 수 있게 함
+                throw e;
             }
         },
 
@@ -523,7 +546,6 @@ document.addEventListener('alpine:init', () => {
                     }
                     this.reassignGroups();
                     
-                    // [핵심 픽스] 반드시 DB에 저장이 완료될 때까지 기다림
                     await this.saveCloudData();
                     this.showToast("✅ 설정 복구 및 저장이 완료되었습니다!");
                 } catch(err) { 
@@ -545,7 +567,7 @@ document.addEventListener('alpine:init', () => {
             return canvas.toDataURL('image/png');
         },
 
-        handleFolderUpload(e) {
+        async handleFolderUpload(e) {
             const files = e.target.files;
             let tempMap = {}; 
 
@@ -604,14 +626,16 @@ document.addEventListener('alpine:init', () => {
                 }
             }
             this.items.sort((a, b) => a.id - b.id); e.target.value = '';
-            this.saveCloudData(); this.showToast("폴더 파일이 업로드되었습니다.");
+            
+            await this.saveCloudData(); // 완전히 저장될때까지 기다림
+            this.showToast("✅ 폴더 파일이 안전하게 업로드 및 저장되었습니다.");
         },
 
-        importExcelLinks(e) {
+        async importExcelLinks(e) {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (event) => {
+            reader.onload = async (event) => {
                 try {
                     const data = new Uint8Array(event.target.result);
                     const workbook = XLSX.read(data, {type: 'array'});
@@ -676,8 +700,9 @@ document.addEventListener('alpine:init', () => {
                         }
                     }
                     if (updatedCount > 0 || addedCount > 0) {
-                        this.items.sort((a, b) => a.id - b.id); this.saveCloudData();
-                        this.showToast(`동기화 완료! (생성: ${addedCount} / 업데이트: ${updatedCount})`);
+                        this.items.sort((a, b) => a.id - b.id); 
+                        await this.saveCloudData(); // 안전하게 저장
+                        this.showToast(`✅ 동기화 완료! (생성: ${addedCount} / 업데이트: ${updatedCount})`);
                     } else this.showToast("가져올 데이터가 없습니다.");
                 } catch (err) { this.showToast("엑셀 파일 분석 오류가 발생했습니다."); }
                 e.target.value = '';
@@ -819,7 +844,7 @@ document.addEventListener('alpine:init', () => {
                 else { this.gifInstance.play(); this.isPlaying = true; }
             }
         },
-        captureModalFrame() {
+        async captureModalFrame() {
             if (!this.modalItem) return;
             let canvas;
             if (this.gifInstance && this.gifTotalFrames > 0) {
@@ -840,7 +865,7 @@ document.addEventListener('alpine:init', () => {
             
             const dataUrl = outCanvas.toDataURL('image/webp', 0.8); 
             this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
-            this.saveCloudData();
+            await this.saveCloudData();
         },
         resetModalFrame() {
             if (!this.modalItem) return;
@@ -856,16 +881,16 @@ document.addEventListener('alpine:init', () => {
 
         cleanName(name) { return name.replace(/^\d+[_.\-\s]+/, ''); },
 
+        // [수정됨] 모바일에서 iframe 화면이 잘리지 않도록 min-height를 1200px로 대폭 확장
         copyViewerLink() {
             const url = window.location.origin + window.location.pathname + '?viewer=true';
-            const iframeCode = `<iframe src="${url}" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; min-height: 800px; max-width: 100%;" allowfullscreen></iframe>`;
+            const iframeCode = `<iframe src="${url}" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; min-height: 1200px; max-width: 100%;" allowfullscreen></iframe>`;
             const textArea = document.createElement("textarea"); textArea.value = iframeCode; textArea.style.position = "fixed";
             document.body.appendChild(textArea); textArea.focus(); textArea.select();
             try { document.execCommand('copy'); this.showToast('뷰어 태그가 복사되었습니다!'); } catch (err) { this.showToast('복사에 실패했습니다.'); }
             document.body.removeChild(textArea);
         },
 
-        // [수정됨] 엑셀 다운로드: includeData 파라미터를 추가하여 2가지 모드로 분기
         async exportExcel(includeData = false) {
             if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
             const data = []; const merges = [];
@@ -881,7 +906,6 @@ document.addEventListener('alpine:init', () => {
                 }
                 const newMark = item.isNew ? "NEW" : "";
                 
-                // [핵심] includeData가 true일 경우 현재 가지고 있는 외부 링크를 엑셀 데이터에 그대로 넣어줍니다.
                 const audioStr = includeData && item.audioUrl ? item.audioUrl : "";
                 const mediaStr = includeData && item.mediaUrl ? item.mediaUrl : "";
 
@@ -908,7 +932,6 @@ document.addEventListener('alpine:init', () => {
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
             const blob = new Blob([wbout], { type: 'application/octet-stream' });
             
-            // 파일명도 분기
             const filename = includeData ? `시그니처목록_현재데이터백업_${this.lastModified}.xlsx` : `시그니처목록_업로드빈양식_${this.lastModified}.xlsx`;
             
             try {
