@@ -40,7 +40,6 @@ document.addEventListener('alpine:init', () => {
         newEventTargets: '',
         newMemberName: '',
         
-        // [추가됨] 개별 링크 추가용 UI 탭 상태 및 폼 데이터
         activeAddTab: 'folder',
         newSigId: '',
         newSigName: '',
@@ -54,19 +53,17 @@ document.addEventListener('alpine:init', () => {
         detailFilter: 'all',
         searchQuery: '', 
         
-        // [수정됨] PC 기본 배율을 125%(4)로 세팅
         zoomLevel: window.innerWidth >= 1024 ? 4 : 3,
         zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
         zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
         
-        // [수정됨] 모바일 최적화를 위해 grid-cols 수를 유동적으로 상향 조정 (모바일에서 3줄 보이게)
         get zoomGridClass() {
             if (!this.isViewerMode) return 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
             const maps = {
                 1: 'grid-cols-5 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-11',
                 2: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
                 3: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8',
-                4: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6', // 모바일에서 3열
+                4: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
                 5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
             };
             return maps[this.zoomLevel] || maps[3];
@@ -108,7 +105,6 @@ document.addEventListener('alpine:init', () => {
             return url.replace(/^http:\/\//i, 'https://');
         },
 
-        // [추가됨] 붙여넣은 외부링크 파일명에서 단가(번호)와 이름 자동 추출하는 엔진
         autoParseLink() {
             let audioUrl = this.newSigAudio.trim();
             let mediaUrl = this.newSigMedia.trim();
@@ -121,10 +117,8 @@ document.addEventListener('alpine:init', () => {
                 try {
                     let decoded = decodeURI(url);
                     let filename = decoded.split('/').pop().split('?')[0];
-                    // 정규식 1: "1000 10개.mp3" 형태 (숫자와 이름 모두 분리)
                     const match = filename.match(/^(\d+)[_.\-\s]+(.*?)(?:\.[a-zA-Z0-9]+)?$/);
                     if (match) return { id: match[1], name: match[2].trim() };
-                    // 정규식 2: "1000.png" 형태 (숫자만 존재)
                     const matchId = filename.match(/^(\d+)(?:\.[a-zA-Z0-9]+)?$/);
                     if (matchId) return { id: matchId[1], name: '' };
                 } catch(e) {}
@@ -134,23 +128,19 @@ document.addEventListener('alpine:init', () => {
             let aData = extract(audioUrl);
             let mData = extract(mediaUrl);
 
-            // 음원 파일의 이름이 더 정확하므로 우선권 부여
             if (aData && aData.id) {
                 bestId = aData.id;
                 if (aData.name) bestName = aData.name;
             }
-            // 미디어(이미지) 링크에서 보조 추출
             if (mData && mData.id) {
                 if (!bestId) bestId = mData.id; 
                 if (!bestName && mData.name) bestName = mData.name; 
             }
 
-            // 추출된 정보를 빈칸에만 채워줌 (사용자가 수정한 이름 덮어쓰기 방지)
             if (bestId) this.newSigId = bestId;
             if (bestName && !this.newSigName) this.newSigName = bestName;
         },
 
-        // [추가됨] 개별 추가 등록 처리 로직
         async addIndividualSignature() {
             const id = parseInt(this.newSigId);
             if (isNaN(id) || id <= 0) {
@@ -198,9 +188,8 @@ document.addEventListener('alpine:init', () => {
             }
             
             this.items.sort((a, b) => a.id - b.id);
-            await this.saveCloudData(); // 안전하게 저장 완료 대기
+            await this.saveCloudData(); 
             
-            // 입력 폼 리셋
             this.newSigId = '';
             this.newSigName = '';
             this.newSigMedia = '';
@@ -396,7 +385,6 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // [수정됨] JSON 설정이 확실하게 저장되도록 Promise(await) 사용 및 방어 로직 강화
         async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
@@ -436,7 +424,6 @@ document.addEventListener('alpine:init', () => {
 
             let payloadStr = JSON.stringify(payloadObj);
 
-            // 1MB 한계를 피하기 위해 950KB 마지노선 적용 및 보호
             if (new Blob([payloadStr]).size > 950000) {
                 this.showToast("🚨 용량 한계 도달! 일부 무거운 캡처 이미지를 해제하여 안전하게 저장합니다.");
                 
@@ -465,7 +452,6 @@ document.addEventListener('alpine:init', () => {
             }
 
             try {
-                // 완전히 서버에 쓰일 때까지 기다림 (새로고침 시 증발 방지)
                 await setDoc(configDoc, JSON.parse(payloadStr), {merge: true});
             } catch (e) {
                 console.error(e);
@@ -627,7 +613,7 @@ document.addEventListener('alpine:init', () => {
             }
             this.items.sort((a, b) => a.id - b.id); e.target.value = '';
             
-            await this.saveCloudData(); // 완전히 저장될때까지 기다림
+            await this.saveCloudData();
             this.showToast("✅ 폴더 파일이 안전하게 업로드 및 저장되었습니다.");
         },
 
@@ -701,7 +687,7 @@ document.addEventListener('alpine:init', () => {
                     }
                     if (updatedCount > 0 || addedCount > 0) {
                         this.items.sort((a, b) => a.id - b.id); 
-                        await this.saveCloudData(); // 안전하게 저장
+                        await this.saveCloudData(); 
                         this.showToast(`✅ 동기화 완료! (생성: ${addedCount} / 업데이트: ${updatedCount})`);
                     } else this.showToast("가져올 데이터가 없습니다.");
                 } catch (err) { this.showToast("엑셀 파일 분석 오류가 발생했습니다."); }
@@ -838,42 +824,107 @@ document.addEventListener('alpine:init', () => {
                 try { this.gifInstance.move_to(targetFrame); } catch(e) {}
             }
         },
+        // [추가됨] 프레임 한 칸씩 앞/뒤로 이동하는 미세조정 스텝 함수
+        stepFrame(step) {
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                this.isPlaying = false;
+                this.gifInstance.pause();
+                let targetFrame = parseInt(this.gifCurrentFrame) + step;
+                if(isNaN(targetFrame)) targetFrame = 0;
+                if(targetFrame < 0) targetFrame = 0;
+                if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
+                this.gifCurrentFrame = targetFrame;
+                try { this.gifInstance.move_to(targetFrame); } catch(e) {}
+            }
+        },
         togglePlay() {
             if (this.gifInstance && this.gifTotalFrames > 0) {
                 if(this.isPlaying) { this.gifInstance.pause(); this.isPlaying = false; } 
                 else { this.gifInstance.play(); this.isPlaying = true; }
             }
         },
+
+        // [수정됨] 반응성/활성화 문제 해결 및 초경량 캡처 사이즈(350px) 적용
         async captureModalFrame() {
             if (!this.modalItem) return;
-            let canvas;
+            let sourceCanvas;
+            
             if (this.gifInstance && this.gifTotalFrames > 0) {
-                this.gifInstance.pause(); this.isPlaying = false; canvas = this.gifInstance.get_canvas();
+                this.gifInstance.pause(); this.isPlaying = false; 
+                sourceCanvas = this.gifInstance.get_canvas();
             } else {
                 const imgElement = document.getElementById('modal_img_preview');
                 if(!imgElement) return;
-                canvas = document.createElement('canvas'); canvas.width = imgElement.naturalWidth || imgElement.width; canvas.height = imgElement.naturalHeight || imgElement.height;
-                const ctx = canvas.getContext('2d'); ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+                sourceCanvas = document.createElement('canvas'); 
+                sourceCanvas.width = imgElement.naturalWidth || imgElement.width || 400; 
+                sourceCanvas.height = imgElement.naturalHeight || imgElement.height || 300;
+                const ctx = sourceCanvas.getContext('2d'); 
+                ctx.drawImage(imgElement, 0, 0, sourceCanvas.width, sourceCanvas.height);
             }
+
+            if (!sourceCanvas || sourceCanvas.width === 0) {
+                this.showToast("🚨 이미지를 로드하지 못했습니다. 모달창을 닫고 다시 시도해주세요.");
+                return;
+            }
+
+            // 아주 얇은 썸네일 사이즈로 강제 리사이징 (DB 보호 및 렉 제거)
+            const MAX_W = 350; 
+            let width = sourceCanvas.width; 
+            let height = sourceCanvas.height; 
+            if(width > MAX_W) { 
+                height = Math.round(height * (MAX_W / width)); 
+                width = MAX_W; 
+            }
+            
             const outCanvas = document.createElement('canvas');
-            let width = canvas.width; let height = canvas.height; const MAX_W = 600; 
-            if(width > MAX_W) { height = Math.round(height * (MAX_W / width)); width = MAX_W; }
-            outCanvas.width = width; outCanvas.height = height;
-            outCanvas.getContext('2d').drawImage(canvas, 0, 0, width, height);
+            outCanvas.width = width; 
+            outCanvas.height = height;
+            outCanvas.getContext('2d').drawImage(sourceCanvas, 0, 0, width, height);
             
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
-            const dataUrl = outCanvas.toDataURL('image/webp', 0.8); 
-            this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
-            await this.saveCloudData();
+            try {
+                // 초경량 webp 포맷 0.7 퀄리티 적용
+                const dataUrl = outCanvas.toDataURL('image/webp', 0.7); 
+                
+                // Alpine 반응성을 강제로 트리거하기 위해 배열에 명시적 업데이트
+                const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
+                if (targetIdx !== -1) {
+                    this.items[targetIdx].imgUrl = dataUrl;
+                    this.items[targetIdx].frozenDataUrl = dataUrl;
+                    this.items[targetIdx].isFrozen = true;
+                    this.items[targetIdx].originalGifUrl = this.modalItem.originalGifUrl;
+                }
+                
+                // 모달 뷰 반영
+                this.modalItem.imgUrl = dataUrl; 
+                this.modalItem.frozenDataUrl = dataUrl; 
+                this.modalItem.isFrozen = true;
+                
+                this.showToast("✅ 프레임이 가볍게 캡처 및 고정되었습니다!");
+                await this.saveCloudData();
+            } catch (err) {
+                this.showToast("🚨 보안(CORS) 정책 때문에 캡처할 수 없는 이미지입니다.");
+            }
         },
+
         resetModalFrame() {
             if (!this.modalItem) return;
-            if (this.modalItem.originalGifUrl) this.modalItem.imgUrl = this.modalItem.originalGifUrl;
-            this.modalItem.isFrozen = false; this.modalItem.frozenDataUrl = null;
+            if (this.modalItem.originalGifUrl) {
+                this.modalItem.imgUrl = this.modalItem.originalGifUrl;
+                const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
+                if (targetIdx !== -1) {
+                    this.items[targetIdx].imgUrl = this.modalItem.originalGifUrl;
+                    this.items[targetIdx].isFrozen = false;
+                    this.items[targetIdx].frozenDataUrl = null;
+                }
+            }
+            this.modalItem.isFrozen = false; 
+            this.modalItem.frozenDataUrl = null;
             if(this.gifInterval) clearInterval(this.gifInterval);
             this.$nextTick(() => { this.initSuperGif(); });
         },
+        
         downloadCurrentModalFrame() {
             if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
             this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.png`);
@@ -881,7 +932,6 @@ document.addEventListener('alpine:init', () => {
 
         cleanName(name) { return name.replace(/^\d+[_.\-\s]+/, ''); },
 
-        // [수정됨] 모바일에서 iframe 화면이 잘리지 않도록 min-height를 1200px로 대폭 확장
         copyViewerLink() {
             const url = window.location.origin + window.location.pathname + '?viewer=true';
             const iframeCode = `<iframe src="${url}" style="border:none; border-radius:12px; overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; min-height: 1200px; max-width: 100%;" allowfullscreen></iframe>`;
