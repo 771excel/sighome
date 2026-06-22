@@ -614,14 +614,21 @@
 
             <div class="flex flex-col gap-4">
                 <div x-show="gifInstance && !modalItem?.isFrozen" class="w-full bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex flex-col gap-2">
-                    <div class="flex items-center gap-4">
-                        <button @click="togglePlay()" class="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 transition shadow">
-                            <i class="text-xl" :class="isPlaying ? 'ph-fill ph-pause' : 'ph-fill ph-play'"></i>
+                    <div class="flex items-center gap-2 sm:gap-4">
+                        <button @click="stepFrame(-1)" class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition shadow" title="이전 프레임 (-1)">
+                            <i class="ph-fill ph-caret-left text-xl"></i>
                         </button>
+                        <button @click="togglePlay()" class="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 transition shadow shrink-0">
+                            <i class="text-2xl" :class="isPlaying ? 'ph-fill ph-pause' : 'ph-fill ph-play'"></i>
+                        </button>
+                        <button @click="stepFrame(1)" class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition shadow" title="다음 프레임 (+1)">
+                            <i class="ph-fill ph-caret-right text-xl"></i>
+                        </button>
+                        
                         <input type="range" x-model="gifCurrentFrame" min="0" :max="gifTotalFrames > 0 ? gifTotalFrames - 1 : 0" @input="scrubGif()" class="flex-1 accent-blue-600 cursor-pointer" :disabled="gifTotalFrames === 0">
-                        <span class="text-sm font-bold w-12 text-right dark:text-gray-300" x-text="`${gifCurrentFrame}/${gifTotalFrames > 0 ? gifTotalFrames - 1 : 0}`"></span>
+                        <span class="text-xs sm:text-sm font-bold w-12 text-right dark:text-gray-300 shrink-0" x-text="`${gifCurrentFrame}/${gifTotalFrames > 0 ? gifTotalFrames - 1 : 0}`"></span>
                     </div>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 text-center font-bold">바를 좌우로 드래그하여 가장 마음에 드는 장면을 찾아 캡처하세요!</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 text-center font-bold">바를 드래그하거나 양옆 버튼을 눌러 가장 마음에 드는 장면을 캡처하세요!</p>
                 </div>
 
                 <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex-wrap gap-2">
@@ -631,7 +638,7 @@
                     </div>
                     <div class="flex flex-wrap gap-3">
                         <button x-show="modalItem && modalItem.isFrozen" @click="downloadCurrentModalFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
-                            <i class="ph-fill ph-download-simple"></i> 다운로드
+                            <i class="ph-fill ph-download-simple"></i> 개별 다운로드
                         </button>
                         <button x-show="modalItem && modalItem.isFrozen" @click="resetModalFrame()" class="bg-gray-600 hover:bg-gray-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             <i class="ph-fill ph-play"></i> 고정 풀기
