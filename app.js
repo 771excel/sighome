@@ -25,7 +25,7 @@ document.addEventListener('alpine:init', () => {
         gifInstance: null,
         gifInterval: null,
         isGifLoading: false,
-        isGifReady: false,    // [추가됨] UI 활성화를 위한 명시적 상태 변수
+        isGifReady: false, 
         gifTotalFrames: 0,
         gifCurrentFrame: 0,
         isPlaying: false,
@@ -356,6 +356,31 @@ document.addEventListener('alpine:init', () => {
                     setTimeout(() => { this.isSyncing = false; }, 100);
                 }
             });
+        },
+
+        // [핵심 추가] 외부 이미지를 CORS 에러 없이 로드하기 위해 강제 Blob화 (프록시 우회)
+        async fetchImageAsBlobUrl(url) {
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            
+            try {
+                // 1. 직접 접근 시도 (CORS 허용된 서버일 경우)
+                let res = await fetch(url, { mode: 'cors', cache: 'no-store' }).catch(() => null);
+                if (res && res.ok) return URL.createObjectURL(await res.blob());
+                
+                // 2. 우회 프록시 1 시도 (allorigins)
+                let proxyUrl1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+                res = await fetch(proxyUrl1, { mode: 'cors', cache: 'no-store' }).catch(() => null);
+                if (res && res.ok) return URL.createObjectURL(await res.blob());
+
+                // 3. 우회 프록시 2 시도 (corsproxy.io)
+                let proxyUrl2 = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                res = await fetch(proxyUrl2, { mode: 'cors', cache: 'no-store' }).catch(() => null);
+                if (res && res.ok) return URL.createObjectURL(await res.blob());
+
+                return url; // 모든 시도 실패 시 원본 링크 반환
+            } catch (e) {
+                return url;
+            }
         },
 
         compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
@@ -758,49 +783,52 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        openGifModal(item) {
+        // [핵심 변경] 모달 오픈 시 프록시 엔진을 통해 이미지를 미리 무해한 Blob 형태로 캐싱하여 모든 CORS 에러 원천 차단
+        async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
             this.gifTotalFrames = 0; 
             this.gifCurrentFrame = 0; 
-            this.isGifLoading = false; 
+            this.isGifLoading = true; 
             this.isPlaying = false;
-            this.isGifReady = false; // [추가됨] 초기화
+            this.isGifReady = false; 
             if(this.gifInterval) clearInterval(this.gifInterval);
-            if (item.isGif && !item.isFrozen) this.$nextTick(() => { this.initSuperGif(); });
+            
+            const previewImg = document.getElementById('modal_img_preview');
+            if(previewImg) previewImg.src = ''; 
+            
+            let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
+            
+            // 프록시를 통해 Blob 객체로 완전 전환
+            let safeUrl = await this.fetchImageAsBlobUrl(originalUrl);
+            this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
+            
+            if(previewImg) previewImg.src = safeUrl;
+
+            if (item.isGif && !item.isFrozen) {
+                this.$nextTick(() => { this.initSuperGif(safeUrl); });
+            } else {
+                this.isGifLoading = false;
+            }
         },
         
-        async initSuperGif() {
+        initSuperGif(targetUrl) {
             if (typeof SuperGif === 'undefined') return;
-            this.isGifLoading = true;
-            this.isGifReady = false;
             
-            // [핵심 픽스] Alpine DOM 파괴를 막기 위해 내부 전용 wrapper에만 캔버스를 주입합니다.
             const wrapper = document.getElementById('supergif_wrapper');
             wrapper.innerHTML = ''; 
             
-            let targetUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            let objectUrl = null;
-
-            try {
-                const response = await fetch(targetUrl, { cache: "no-store" });
-                if (!response.ok) throw new Error('Network response not ok');
-                const blob = await response.blob();
-                objectUrl = URL.createObjectURL(blob); targetUrl = objectUrl;
-            } catch (e) { console.warn("CORS 우회 fetch 실패", e); }
-            
-            const crossOriginAttr = targetUrl.startsWith('blob:') ? '' : 'crossorigin="anonymous"';
-            wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" ${crossOriginAttr} rel:auto_play="0" style="display:none;" />`;
+            // Blob URL이므로 crossorigin 제약으로부터 자유로움
+            wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
             const img = document.getElementById('modal_gif_target');
             
             const fallbackTimer = setTimeout(() => {
                 if(this.isGifLoading) {
                     this.isGifLoading = false; 
-                    this.isGifReady = false; // fallback 발생 시 컨트롤러 숨김
+                    this.isGifReady = false; 
                     this.showToast('GIF 파일 분석 지연, 기본 모드 전환.');
                     if(this.gifInstance) this.gifInstance = null;
                     wrapper.innerHTML = '';
-                    if (objectUrl) URL.revokeObjectURL(objectUrl);
                 }
             }, 20000);
 
@@ -817,13 +845,12 @@ document.addEventListener('alpine:init', () => {
                         this.gifInstance = null; 
                         this.isGifReady = false;
                         wrapper.innerHTML = '';
-                        if (objectUrl) URL.revokeObjectURL(objectUrl);
                         return;
                     }
                     this.gifTotalFrames = length; 
                     this.gifCurrentFrame = 0; 
                     this.isPlaying = true; 
-                    this.isGifReady = true; // [핵심] 준비 완료 상태값을 트리거하여 UI 활성화
+                    this.isGifReady = true; 
                     sg.play();
                     this.gifInterval = setInterval(() => { 
                         if(this.isPlaying && this.gifInstance) {
@@ -836,17 +863,23 @@ document.addEventListener('alpine:init', () => {
                 this.isGifLoading = false;
                 this.isGifReady = false;
                 wrapper.innerHTML = '';
-                if (objectUrl) URL.revokeObjectURL(objectUrl);
             }
         },
+        
         closeGifModal() {
-            this.modalOpen = false; this.modalItem = null;
+            this.modalOpen = false; 
+            if (this.modalItem && this.modalItem._tempBlobUrl) {
+                URL.revokeObjectURL(this.modalItem._tempBlobUrl);
+                delete this.modalItem._tempBlobUrl;
+            }
+            this.modalItem = null;
             if(this.gifInterval) clearInterval(this.gifInterval);
             if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
             this.isGifReady = false;
             document.getElementById('supergif_wrapper').innerHTML = ''; 
             this.saveCloudData();
         },
+        
         scrubGif() {
             if (this.gifInstance && this.gifTotalFrames > 0) {
                 this.isPlaying = false; this.gifInstance.pause();
@@ -856,7 +889,7 @@ document.addEventListener('alpine:init', () => {
                 try { this.gifInstance.move_to(targetFrame); } catch(e) {}
             }
         },
-        // [추가됨] 좌우 프레임 1칸씩 미세조정 함수
+        
         stepFrame(step) {
             if (this.gifInstance && this.gifTotalFrames > 0) {
                 this.isPlaying = false;
@@ -869,6 +902,7 @@ document.addEventListener('alpine:init', () => {
                 try { this.gifInstance.move_to(targetFrame); } catch(e) {}
             }
         },
+        
         togglePlay() {
             if (this.gifInstance && this.gifTotalFrames > 0) {
                 if(this.isPlaying) { this.gifInstance.pause(); this.isPlaying = false; } 
@@ -876,7 +910,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
         
-        // [수정됨] 캡처 사이즈 350px 초경량 압축 및 배열 반응성 동기화
+        // 캔버스 Taint 원천 차단으로 무결점 캡처 지원
         async captureModalFrame() {
             if (!this.modalItem) return;
             let sourceCanvas;
@@ -917,7 +951,6 @@ document.addEventListener('alpine:init', () => {
             try {
                 const dataUrl = outCanvas.toDataURL('image/webp', 0.7); 
                 
-                // Alpine 반응성 강제 트리거 (즉시 UI 업데이트)
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
                 if (targetIdx !== -1) {
                     this.items[targetIdx].imgUrl = dataUrl;
@@ -933,15 +966,17 @@ document.addEventListener('alpine:init', () => {
                 this.showToast("✅ 프레임이 가볍게 캡처 및 고정되었습니다!");
                 await this.saveCloudData();
             } catch (err) {
-                this.showToast("🚨 보안(CORS) 정책 때문에 캡처할 수 없는 이미지입니다.");
+                this.showToast("🚨 알 수 없는 오류로 캡처를 실패했습니다.");
             }
         },
         
-        resetModalFrame() {
+        async resetModalFrame() {
             if (!this.modalItem) return;
+            this.isGifLoading = true;
+            this.isGifReady = false;
+
             if (this.modalItem.originalGifUrl) {
                 this.modalItem.imgUrl = this.modalItem.originalGifUrl;
-                // 반응성 동기화
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
                 if (targetIdx !== -1) {
                     this.items[targetIdx].imgUrl = this.modalItem.originalGifUrl;
@@ -951,10 +986,18 @@ document.addEventListener('alpine:init', () => {
             }
             this.modalItem.isFrozen = false; 
             this.modalItem.frozenDataUrl = null;
-            this.isGifReady = false;
             if(this.gifInterval) clearInterval(this.gifInterval);
-            this.$nextTick(() => { this.initSuperGif(); });
+            
+            let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
+            let safeUrl = await this.fetchImageAsBlobUrl(originalUrl);
+            this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
+            
+            const previewImg = document.getElementById('modal_img_preview');
+            if(previewImg) previewImg.src = safeUrl;
+
+            this.$nextTick(() => { this.initSuperGif(safeUrl); });
         },
+        
         downloadCurrentModalFrame() {
             if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
             this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.png`);
