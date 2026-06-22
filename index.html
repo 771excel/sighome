@@ -75,9 +75,13 @@
                 </button>
             </div>
 
-            <button x-show="!isViewerMode" @click="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm shrink-0 hidden sm:flex">
-                <i class="ph ph-file-xls"></i> 엑셀 양식
+            <button x-show="!isViewerMode" @click="exportExcel(false)" class="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm shrink-0 hidden lg:flex" title="빈 양식 다운로드">
+                <i class="ph ph-file-xls"></i> 빈 양식
             </button>
+            <button x-show="!isViewerMode" @click="exportExcel(true)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm shrink-0 hidden sm:flex" title="현재 등록된 외부링크 포함하여 엑셀 추출">
+                <i class="ph-fill ph-file-xls"></i> 현재 링크 엑셀
+            </button>
+            
             <button x-show="!isViewerMode" @click="downloadImage()" :disabled="isDownloading" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition-colors shadow-sm disabled:opacity-50 shrink-0">
                 <i class="ph ph-download-simple" x-show="!isDownloading"></i>
                 <i class="ph ph-spinner animate-spin" x-show="isDownloading"></i>
@@ -108,71 +112,77 @@
             <div class="flex-1 overflow-y-auto p-5 min-h-0" x-ref="leftPanel">
                 
                 <div x-show="activeTab === 'basic'" class="space-y-6">
-                    <section class="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                        <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-blue-900 select-none">
-                            <i class="ph ph-folder-open"></i> [방법1] 로컬 폴더 업로드
-                        </h2>
-                        <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-blue-400 text-blue-600 py-4 rounded-lg hover:bg-blue-100 transition">
-                            <input type="file" webkitdirectory directory multiple @change="handleFolderUpload" class="hidden">
-                            <div class="flex flex-col items-center gap-1">
-                                <i class="ph ph-upload-simple text-2xl"></i>
-                                <span class="font-medium">PC의 폴더 선택하여 로드하기</span>
-                            </div>
-                        </label>
-                    </section>
-
-                    <section class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 select-none hidden">
-                        <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-indigo-900">
-                            <i class="ph ph-globe"></i> [방법2] 웹 서버 링크로 일괄 연결
-                        </h2>
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold text-indigo-800 w-24">웹 폴더 주소:</span>
-                                <input type="text" x-model="webAssetBaseUrl" placeholder="예: ./assets/ 또는 https://..." class="flex-1 border rounded px-3 py-1.5 text-sm focus:outline-indigo-500">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold text-indigo-800 w-24">이미지 형식:</span>
-                                <select x-model="webAssetImgExt" class="flex-1 border rounded px-3 py-1.5 text-sm">
-                                    <option value=".gif">.gif (움직이는 이미지)</option>
-                                    <option value=".png">.png</option>
-                                    <option value=".webp">.webp</option>
-                                    <option value=".jpg">.jpg</option>
-                                    <option value="">(연결 안 함)</option>
-                                </select>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-sm font-bold text-indigo-800 w-24">음원 형식:</span>
-                                <select x-model="webAssetAudioExt" class="flex-1 border rounded px-3 py-1.5 text-sm">
-                                    <option value=".mp3">.mp3</option>
-                                    <option value=".wav">.wav</option>
-                                    <option value="">(연결 안 함)</option>
-                                </select>
-                            </div>
-                            <button @click="autoLinkWebAssets()" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg transition shadow-sm flex items-center justify-center gap-2">
-                                <i class="ph-fill ph-link"></i> 서버 주소로 전체 매핑
-                            </button>
+                    
+                    <div class="select-none">
+                        <h2 class="font-bold text-lg mb-3 border-b pb-2 text-gray-800">시그니처 등록 및 연결</h2>
+                        <div class="flex gap-1 border-b border-gray-200 pb-2 mb-4">
+                            <button @click="activeAddTab = 'folder'" :class="activeAddTab === 'folder' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center">📁 폴더 업로드</button>
+                            <button @click="activeAddTab = 'individual'" :class="activeAddTab === 'individual' ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center">➕ 개별 추가</button>
+                            <button @click="activeAddTab = 'excel'" :class="activeAddTab === 'excel' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center">📊 엑셀 일괄등록</button>
                         </div>
-                    </section>
 
-                    <section class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 select-none">
-                        <h2 class="font-bold text-lg mb-2 flex items-center gap-2 text-emerald-900">
-                            <i class="ph ph-file-xls"></i> [방법3] 엑셀 외부링크 일괄 등록
-                        </h2>
-                        <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm mt-2">
-                            <input type="file" accept=".xlsx, .xls, .csv" @change="importExcelLinks" class="hidden">
-                            <div class="flex items-center gap-2">
-                                <i class="ph ph-upload-simple text-xl"></i>
-                                <span class="font-bold">링크가 적힌 엑셀 파일 선택</span>
+                        <div x-show="activeAddTab === 'folder'" class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                            <h3 class="font-bold text-sm mb-2 flex items-center gap-2 text-blue-900">
+                                <i class="ph ph-folder-open"></i> PC에 있는 이미지/음원 폴더 로드
+                            </h3>
+                            <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-blue-400 text-blue-600 py-4 rounded-lg hover:bg-blue-100 transition mt-2">
+                                <input type="file" webkitdirectory directory multiple @change="handleFolderUpload" class="hidden">
+                                <div class="flex flex-col items-center gap-1">
+                                    <i class="ph ph-upload-simple text-2xl"></i>
+                                    <span class="font-bold text-sm">폴더 선택하여 일괄 로드하기</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div x-show="activeAddTab === 'individual'" class="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                            <h3 class="font-bold text-sm mb-3 flex items-center gap-2 text-purple-900">
+                                <i class="ph ph-link"></i> 외부 링크로 시그니처 개별 추가
+                            </h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-xs font-bold text-purple-800 mb-1 block">이미지/GIF 링크 <span class="text-gray-500 font-normal">(입력 시 번호/이름 자동 추출)</span></label>
+                                    <input type="text" x-model="newSigMedia" @input="autoParseLink(newSigMedia)" placeholder="https://..." class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 shadow-sm">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-purple-800 mb-1 block">음원 링크 (선택)</label>
+                                    <input type="text" x-model="newSigAudio" @input="autoParseLink(newSigAudio)" placeholder="https://..." class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 shadow-sm">
+                                </div>
+                                <div class="flex gap-2">
+                                    <div class="w-1/3">
+                                        <label class="text-xs font-bold text-purple-800 mb-1 block">단가(번호)</label>
+                                        <input type="number" x-model="newSigId" placeholder="예: 1000" class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 font-black text-blue-600 shadow-sm">
+                                    </div>
+                                    <div class="w-2/3">
+                                        <label class="text-xs font-bold text-purple-800 mb-1 block">시그니처 이름</label>
+                                        <input type="text" x-model="newSigName" placeholder="직접 수정 가능" class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 font-bold text-gray-800 shadow-sm">
+                                    </div>
+                                </div>
+                                <button @click="addIndividualSignature()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg transition shadow-sm mt-1 flex items-center justify-center gap-2">
+                                    <i class="ph-fill ph-plus-circle"></i> 목록에 추가 / 업데이트
+                                </button>
                             </div>
-                        </label>
-                    </section>
+                        </div>
 
-                    <section class="select-none">
+                        <div x-show="activeAddTab === 'excel'" class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                            <h3 class="font-bold text-sm mb-2 flex items-center gap-2 text-emerald-900">
+                                <i class="ph ph-file-xls"></i> 엑셀 파일로 링크/이름 일괄 등록
+                            </h3>
+                            <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-emerald-400 text-emerald-600 py-3 rounded-lg hover:bg-emerald-100 transition shadow-sm mt-2">
+                                <input type="file" accept=".xlsx, .xls, .csv" @change="importExcelLinks" class="hidden">
+                                <div class="flex items-center gap-2">
+                                    <i class="ph ph-upload-simple text-xl"></i>
+                                    <span class="font-bold text-sm">작성된 엑셀 파일 업로드</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <section class="select-none pt-2">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2">특별 일정 / 이벤트 하이라이트</h2>
                         <div class="flex flex-col gap-2 mb-3 bg-gray-50 p-3 rounded border">
                             <input type="text" x-model="newEventTitle" placeholder="이벤트 명 (예: 팀 데스매치 시그)" class="w-full border rounded px-3 py-2 text-sm focus:outline-blue-500">
                             <input type="text" x-model="newEventTargets" placeholder="강조할 번호 입력 (쉼표로 구분. 예: 1, 5, 12)" class="w-full border rounded px-3 py-2 text-sm focus:outline-blue-500">
-                            <button @click="addEvent()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 mt-1">이벤트 강조 추가</button>
+                            <button @click="addEvent()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 mt-1 font-bold">이벤트 강조 추가</button>
                         </div>
                         <div class="space-y-2">
                             <template x-for="event in events" :key="event.id">
@@ -187,11 +197,11 @@
                         </div>
                     </section>
                     
-                    <section class="select-none">
+                    <section class="select-none pt-2">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2">개인 시그니처 멤버 관리 (드래그 정렬)</h2>
                         <div class="flex gap-2 mb-3">
                             <input type="text" x-model="newMemberName" placeholder="새 멤버 이름" class="flex-1 border rounded px-3 py-2 text-sm focus:outline-blue-500">
-                            <button @click="addMember()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700">추가</button>
+                            <button @click="addMember()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 font-bold">추가</button>
                         </div>
                         <div class="space-y-2" x-init="new Sortable($el, { animation: 150, handle: '.drag-handle', onEnd: e => reorderMembers(e.oldIndex, e.newIndex) })">
                             <template x-for="member in members" :key="member.id">
@@ -206,7 +216,7 @@
                         </div>
                     </section>
 
-                    <section class="select-none">
+                    <section class="select-none pt-2">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2">자동 분류 그룹 관리 (드래그 정렬)</h2>
                         <div class="flex flex-col gap-2 mb-3 bg-gray-50 p-3 rounded border">
                             <div class="flex gap-2 items-center">
@@ -218,7 +228,7 @@
                                 <span class="text-gray-400">~</span>
                                 <input type="number" x-model="newGroupEnd" placeholder="끝 번호" class="w-1/2 border rounded px-3 py-2 text-sm focus:outline-blue-500">
                             </div>
-                            <button @click="addGroup()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 mt-1">그룹 생성 (자동 이동)</button>
+                            <button @click="addGroup()" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-700 mt-1 font-bold">그룹 생성 (자동 이동)</button>
                         </div>
                         <div class="space-y-2" x-init="new Sortable($el, { animation: 150, handle: '.drag-handle', onEnd: e => reorderGroups(e.oldIndex, e.newIndex) })">
                             <template x-for="group in groups" :key="group.id">
@@ -266,10 +276,10 @@
                             <i class="ph-fill ph-floppy-disk mr-1 text-blue-600"></i> 설정 수동 백업 및 복구
                         </h2>
                         <div class="flex gap-3">
-                            <button @click="exportSettings()" class="flex-1 bg-green-600 text-white px-3 py-3 rounded-lg text-sm hover:bg-green-700 font-bold flex flex-col items-center justify-center gap-1 shadow">
+                            <button @click="exportSettings()" class="flex-1 bg-gray-800 text-white px-3 py-3 rounded-lg text-sm hover:bg-gray-900 font-bold flex flex-col items-center justify-center gap-1 shadow">
                                 <i class="ph ph-download-simple text-xl"></i> 현재 설정 다운로드
                             </button>
-                            <label class="flex-1 cursor-pointer bg-gray-800 text-white px-3 py-3 rounded-lg text-sm hover:bg-gray-900 font-bold flex flex-col items-center justify-center gap-1 shadow transition">
+                            <label class="flex-1 cursor-pointer bg-blue-600 text-white px-3 py-3 rounded-lg text-sm hover:bg-blue-700 font-bold flex flex-col items-center justify-center gap-1 shadow transition">
                                 <input type="file" accept=".json" @change="importSettings" class="hidden">
                                 <i class="ph ph-upload-simple text-xl"></i> 이전 설정 불러오기
                             </label>
@@ -323,7 +333,7 @@
                             <div class="flex justify-between items-center gap-4">
                                 <div class="flex items-center gap-2 flex-1">
                                     <span class="text-sm font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded shrink-0 border border-blue-200" x-text="item.id"></span>
-                                    <input type="text" x-model="item.name" @change="saveCloudData()" class="text-sm font-bold text-gray-800 border-b border-gray-300 hover:border-blue-500 focus:border-blue-500 focus:outline-none bg-transparent w-full py-0.5 transition-colors placeholder-gray-400" placeholder="시그니처 이름 입력">
+                                    <input type="text" x-model="item.name" @change="saveCloudData()" class="text-sm font-bold text-gray-800 border-b border-gray-300 hover:border-blue-500 focus:border-blue-500 focus:outline-none bg-transparent w-full py-0.5 transition-colors placeholder-gray-400" placeholder="시그니처 이름 직접 수정">
                                 </div>
                                 <div class="flex gap-4 text-xs font-bold shrink-0">
                                     <label class="flex items-center gap-1.5 cursor-pointer">
