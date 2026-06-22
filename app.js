@@ -40,6 +40,13 @@ document.addEventListener('alpine:init', () => {
         newEventTargets: '',
         newMemberName: '',
         
+        // [추가됨] 개별 링크 추가용 변수 탭 상태 및 입력값
+        activeAddTab: 'folder',
+        newSigId: '',
+        newSigName: '',
+        newSigMedia: '',
+        newSigAudio: '',
+
         webAssetBaseUrl: './assets/',
         webAssetImgExt: '.gif',
         webAssetAudioExt: '.mp3',
@@ -97,6 +104,85 @@ document.addEventListener('alpine:init', () => {
         upgradeHttps(url) {
             if (!url) return '';
             return url.replace(/^http:\/\//i, 'https://');
+        },
+
+        // [추가됨] 붙여넣은 외부링크에서 단가/이름 자동 추출
+        autoParseLink(url) {
+            if (!url) return;
+            try {
+                let decoded = decodeURI(url);
+                let parts = decoded.split('/');
+                let filenameWithQuery = parts[parts.length - 1];
+                let filename = filenameWithQuery.split('?')[0];
+                
+                const match = filename.match(/^(\d+)[_.\-\s]+(.*?)(?:\.[a-zA-Z0-9]+)?$/);
+                if (match) {
+                    if (!this.newSigId) this.newSigId = match[1];
+                    if (!this.newSigName && match[2]) this.newSigName = match[2].trim();
+                } else {
+                    const matchIdOnly = filename.match(/^(\d+)(?:\.[a-zA-Z0-9]+)?$/);
+                    if (matchIdOnly) {
+                        if (!this.newSigId) this.newSigId = matchIdOnly[1];
+                    }
+                }
+            } catch (e) {}
+        },
+
+        // [추가됨] 개별 추가 등록 처리 로직
+        async addIndividualSignature() {
+            const id = parseInt(this.newSigId);
+            if (isNaN(id) || id <= 0) {
+                this.showToast("단가(번호)를 정확히 입력해주세요.");
+                return;
+            }
+            
+            let mediaUrl = this.upgradeHttps(this.newSigMedia.trim());
+            let audioUrl = this.upgradeHttps(this.newSigAudio.trim());
+            let name = this.newSigName.trim() || `${id}번 시그니처`;
+
+            let existingItem = this.items.find(x => x.id === id);
+            
+            if (existingItem) {
+                existingItem.name = name;
+                if (mediaUrl) {
+                    existingItem.mediaUrl = mediaUrl;
+                    existingItem.originalGifUrl = mediaUrl;
+                    if (!existingItem.isFrozen || !existingItem.frozenDataUrl) existingItem.imgUrl = mediaUrl;
+                    existingItem.hasImage = true;
+                    existingItem.isGif = mediaUrl.toLowerCase().includes('.gif');
+                }
+                if (audioUrl) {
+                    existingItem.audioUrl = audioUrl;
+                    existingItem.hasAudio = true;
+                }
+            } else {
+                this.items.push({
+                    id: id,
+                    name: name,
+                    imgUrl: mediaUrl || this.getPlaceholderImage(),
+                    audioUrl: audioUrl || '',
+                    mediaUrl: mediaUrl || '',
+                    hasAudio: !!audioUrl,
+                    hasImage: !!mediaUrl,
+                    isGif: mediaUrl ? mediaUrl.toLowerCase().includes('.gif') : false,
+                    isFrozen: false,
+                    originalGifUrl: mediaUrl || '',
+                    frozenDataUrl: null,
+                    isNew: true,
+                    isPersonal: false,
+                    memberId: '',
+                    groupId: this.findGroupForId(id)
+                });
+            }
+            
+            this.items.sort((a, b) => a.id - b.id);
+            await this.saveCloudData();
+            
+            this.newSigId = '';
+            this.newSigName = '';
+            this.newSigMedia = '';
+            this.newSigAudio = '';
+            this.showToast(`${id}번 시그니처가 성공적으로 반영되었습니다.`);
         },
 
         updateMediaUrl(item) {
@@ -215,7 +301,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-loadCloudData() {
+        loadCloudData() {
             if (!this.db || !this.userId) return; 
             
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
@@ -225,6 +311,9 @@ loadCloudData() {
                     this.isSyncing = true;
                     const data = snapshot.data();
                     if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
+                    if(data.groups) this.groups = data.groups;
+                    if(data.members) this.members = data.members;
+                    if(data.events) this.events = data.events;
                     
                     if(data.itemConfigs) {
                         let updatedItems = [...this.items];
@@ -232,7 +321,6 @@ loadCloudData() {
                         data.itemConfigs.forEach(conf => {
                             let idx = updatedItems.findIndex(i => i.id === conf.id);
                             if(idx !== -1) {
-                                // [중요 수정] 데이터가 깨졌는지 체크하고, 깨졌으면 원본 url로 복구
                                 let isBroken = conf.isFrozen && (!conf.frozenDataUrl || conf.frozenDataUrl.length < 100);
                                 
                                 updatedItems[idx] = { 
@@ -255,34 +343,6 @@ loadCloudData() {
                     setTimeout(() => { this.isSyncing = false; }, 100);
                 }
             });
-        },
-
-        // [중요] 불러오기 시에도 깨진 이미지 체크
-        async importSettings(e) {
-            const file = e.target.files[0];
-            if(!file) return;
-            const reader = new FileReader();
-            reader.onload = async (event) => { 
-                try {
-                    const data = JSON.parse(event.target.result);
-                    // ... (기타 설정 불러오기 동일)
-                    if(data.itemConfigs) {
-                        let updatedItems = []; 
-                        for (let conf of data.itemConfigs) {
-                            // 데이터가 비정상적으로 짧으면 고정 해제하여 원본 URL(mediaUrl) 사용 유도
-                            if (conf.isFrozen && (!conf.frozenDataUrl || conf.frozenDataUrl.length < 100)) {
-                                conf.isFrozen = false;
-                            }
-                            // ... (기존 로직) ...
-                            updatedItems.push({ ...conf, imgUrl: conf.isFrozen ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()) });
-                        }
-                        this.items = updatedItems;
-                    }
-                    this.saveCloudData();
-                    this.showToast("복구 및 이미지 최적화가 완료되었습니다.");
-                } catch(err) { this.showToast("파일 분석 오류"); }
-            };
-            reader.readAsText(file);
         },
 
         compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
@@ -313,6 +373,7 @@ loadCloudData() {
             });
         },
 
+        // [수정됨] JSON 파일이 확실하게 저장되도록 Promise 반환 및 에러 방어 로직 강화
         async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
@@ -342,15 +403,18 @@ loadCloudData() {
                 audioUrl: i.audioUrl, mediaUrl: i.mediaUrl, hasAudio: i.hasAudio, hasImage: i.hasImage, isGif: i.isGif, originalGifUrl: i.originalGifUrl
             }));
 
-            let payloadStr = JSON.stringify({
+            let payloadObj = {
                 isDarkMode: this.isDarkMode,
                 groups: this.groups,
                 members: this.members,
                 events: this.events,
                 itemConfigs: itemConfigs
-            });
+            };
 
-            if (payloadStr.length > 950000) {
+            let payloadStr = JSON.stringify(payloadObj);
+
+            // 1MB(1,048,576 byte) 한계를 피하기 위해 950KB를 마지노선으로 잡음
+            if (new Blob([payloadStr]).size > 950000) {
                 this.showToast("🚨 용량 한계 도달! 일부 무거운 캡처 이미지를 해제하여 안전하게 저장합니다.");
                 
                 let sortedConfigs = [...itemConfigs].sort((a, b) => (b.frozenDataUrl ? b.frozenDataUrl.length : 0) - (a.frozenDataUrl ? a.frozenDataUrl.length : 0));
@@ -362,12 +426,9 @@ loadCloudData() {
                             target.isFrozen = false;
                             target.frozenDataUrl = null;
                         }
-                        
-                        payloadStr = JSON.stringify({
-                            isDarkMode: this.isDarkMode, groups: this.groups, members: this.members, events: this.events, itemConfigs: itemConfigs
-                        });
-                        
-                        if (payloadStr.length <= 950000) break; 
+                        payloadObj.itemConfigs = itemConfigs;
+                        payloadStr = JSON.stringify(payloadObj);
+                        if (new Blob([payloadStr]).size <= 950000) break; 
                     }
                 }
 
@@ -380,17 +441,20 @@ loadCloudData() {
                 });
             }
 
-            setDoc(configDoc, JSON.parse(payloadStr), {merge: true}).then(() => {
-            }).catch(e => { 
+            try {
+                // await를 사용하여 DB에 완전히 쓰일 때까지 기다림
+                await setDoc(configDoc, JSON.parse(payloadStr), {merge: true});
+            } catch (e) {
                 console.error(e);
                 if (e.code === 'resource-exhausted' || e.message.includes('exceeds')) {
                     this.showToast("🚨 저장 실패: 파이어베이스 용량 초과(1MB).");
                 } else if (e.code === 'permission-denied') {
-                    this.showToast("🚨 저장 실패: 파이어베이스 데이터베이스 쓰기 권한이 없습니다.");
+                    this.showToast("🚨 저장 실패: 데이터베이스 쓰기 권한이 없습니다.");
                 } else {
                     this.showToast("저장 실패: " + e.message); 
                 }
-            });
+                throw e; // 오류를 상위로 던져서 importSettings가 알 수 있게 함
+            }
         },
 
         async exportSettings() {
@@ -439,10 +503,8 @@ loadCloudData() {
             const file = e.target.files[0];
             if(!file) return;
             const reader = new FileReader();
-            
             reader.onload = async (event) => { 
                 try {
-                    this.showToast("백업 파일 로딩 및 용량 최적화 중입니다...");
                     const data = JSON.parse(event.target.result);
                     if(data.isDarkMode !== undefined) this.isDarkMode = data.isDarkMode;
                     if(data.groups) this.groups = data.groups;
@@ -450,39 +512,22 @@ loadCloudData() {
                     if(data.members) this.members = data.members;
                     
                     if(data.itemConfigs) {
-                        let updatedItems = [...this.items]; 
-                        
+                        let updatedItems = []; 
                         for (let conf of data.itemConfigs) {
-                            if (conf.isFrozen && conf.frozenDataUrl && conf.frozenDataUrl.length > 30000) {
-                                conf.frozenDataUrl = await this.compressDataUrl(conf.frozenDataUrl, 0.6, 250);
+                            if (conf.isFrozen && (!conf.frozenDataUrl || conf.frozenDataUrl.length < 100)) {
+                                conf.isFrozen = false;
                             }
-
-                            let idx = updatedItems.findIndex(i => i.id === conf.id);
-                            if(idx !== -1) {
-                                updatedItems[idx] = { ...updatedItems[idx], ...conf };
-                                if (conf.isFrozen && conf.frozenDataUrl) updatedItems[idx].imgUrl = conf.frozenDataUrl;
-                                else if (conf.mediaUrl) updatedItems[idx].imgUrl = conf.mediaUrl;
-                            } else {
-                                updatedItems.push({
-                                    ...conf,
-                                    imgUrl: (conf.isFrozen && conf.frozenDataUrl) ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()),
-                                    hasAudio: conf.hasAudio || !!conf.audioUrl,
-                                    hasImage: conf.hasImage || !!conf.mediaUrl,
-                                    isGif: conf.isGif || false,
-                                    originalGifUrl: conf.originalGifUrl || ''
-                                });
-                            }
+                            updatedItems.push({ ...conf, imgUrl: conf.isFrozen ? conf.frozenDataUrl : (conf.mediaUrl || this.getPlaceholderImage()) });
                         }
-                        updatedItems.sort((a, b) => a.id - b.id);
                         this.items = updatedItems;
                     }
-                    this.reassignGroups(); 
+                    this.reassignGroups();
                     
-                    await this.saveCloudData(); 
-                    this.showToast("설정이 성공적으로 복구 및 최적화되었습니다.");
+                    // [핵심 픽스] 반드시 DB에 저장이 완료될 때까지 기다림
+                    await this.saveCloudData();
+                    this.showToast("✅ 설정 복구 및 저장이 완료되었습니다!");
                 } catch(err) { 
-                    console.error(err);
-                    this.showToast("설정 파일을 읽는 중 오류가 발생했습니다."); 
+                    this.showToast("파일 분석 또는 저장 오류 발생!"); 
                 }
             };
             reader.readAsText(file);
@@ -500,7 +545,7 @@ loadCloudData() {
             return canvas.toDataURL('image/png');
         },
 
-handleFolderUpload(e) {
+        handleFolderUpload(e) {
             const files = e.target.files;
             let tempMap = {}; 
 
@@ -527,14 +572,11 @@ handleFolderUpload(e) {
                 const targetGroupId = this.findGroupForId(parseInt(id)); 
 
                 if (existingItem) {
-                    // [수정됨] 기존 항목에 이미 썸네일이 고정(isFrozen)되어 있다면, 새 파일이 들어와도 덮어쓰지 않음
                     if (tempMap[id].imgUrl) {
                         if (existingItem.isFrozen && existingItem.frozenDataUrl) {
-                            // 이미 썸네일이 고정되어 있으므로 원본 주소만 업데이트하고 이미지는 유지
                             existingItem.originalGifUrl = tempMap[id].imgUrl;
                             existingItem.isGif = tempMap[id].isGif;
                         } else {
-                            // 고정된 게 없으면 새 파일로 갱신
                             existingItem.imgUrl = tempMap[id].imgUrl;
                             existingItem.isGif = tempMap[id].isGif;
                             existingItem.isFrozen = false;
@@ -563,28 +605,6 @@ handleFolderUpload(e) {
             }
             this.items.sort((a, b) => a.id - b.id); e.target.value = '';
             this.saveCloudData(); this.showToast("폴더 파일이 업로드되었습니다.");
-        },
-
-        autoLinkWebAssets() {
-            if(!this.webAssetBaseUrl.trim()) { this.showToast("폴더 주소를 입력해주세요."); return; }
-            let count = 0; const baseUrl = this.webAssetBaseUrl.trim();
-            
-            this.items.forEach(item => {
-                let updated = false;
-                if(this.webAssetImgExt) {
-                    const url = this.upgradeHttps(`${baseUrl}${item.id}${this.webAssetImgExt}`);
-                    item.mediaUrl = url; item.isGif = this.webAssetImgExt === '.gif'; item.hasImage = true;
-                    if (item.isFrozen && item.frozenDataUrl) item.originalGifUrl = url;
-                    else item.imgUrl = url;
-                    updated = true;
-                }
-                if(this.webAssetAudioExt) {
-                    item.audioUrl = this.upgradeHttps(`${baseUrl}${item.id}${this.webAssetAudioExt}`);
-                    item.hasAudio = true; updated = true;
-                }
-                if(updated) count++;
-            });
-            this.saveCloudData(); this.showToast(`${count}개 항목 매핑 완료!`);
         },
 
         importExcelLinks(e) {
@@ -818,7 +838,6 @@ handleFolderUpload(e) {
             
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
-            // 데이터베이스 용량 터지는 것을 막기 위해 가벼운 포맷 적용 (다운로드 PNG 기능엔 영향 없음)
             const dataUrl = outCanvas.toDataURL('image/webp', 0.8); 
             this.modalItem.imgUrl = dataUrl; this.modalItem.frozenDataUrl = dataUrl; this.modalItem.isFrozen = true;
             this.saveCloudData();
@@ -846,7 +865,8 @@ handleFolderUpload(e) {
             document.body.removeChild(textArea);
         },
 
-        async exportExcel() {
+        // [수정됨] 엑셀 다운로드: includeData 파라미터를 추가하여 2가지 모드로 분기
+        async exportExcel(includeData = false) {
             if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
             const data = []; const merges = [];
             data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]); merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
@@ -860,8 +880,13 @@ handleFolderUpload(e) {
                     remarks.push(member ? `개인 (${member.name})` : "개인");
                 }
                 const newMark = item.isNew ? "NEW" : "";
-                data.push([item.id, `${item.id} ${this.cleanName(item.name)}`, "음원 외부링크", "", remarks.join(", "), "", "", newMark]);
-                data.push(["", "", "이미지 외부링크", "", "", "", "", ""]);
+                
+                // [핵심] includeData가 true일 경우 현재 가지고 있는 외부 링크를 엑셀 데이터에 그대로 넣어줍니다.
+                const audioStr = includeData && item.audioUrl ? item.audioUrl : "";
+                const mediaStr = includeData && item.mediaUrl ? item.mediaUrl : "";
+
+                data.push([item.id, `${item.id} ${this.cleanName(item.name)}`, "음원 외부링크", audioStr, remarks.join(", "), "", "", newMark]);
+                data.push(["", "", "이미지 외부링크", mediaStr, "", "", "", ""]);
                 data.push(["", "", "", "", "", "", "", ""]);
 
                 merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } }, { s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } }, { s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } }, { s: { r: currentRow, c: 7 }, e: { r: currentRow + 1, c: 7 } });
@@ -882,7 +907,10 @@ handleFolderUpload(e) {
             XLSX.utils.book_append_sheet(wb, ws, "시그니처 목록");
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
             const blob = new Blob([wbout], { type: 'application/octet-stream' });
-            const filename = `시그니처목록_업로드양식_${this.lastModified}.xlsx`;
+            
+            // 파일명도 분기
+            const filename = includeData ? `시그니처목록_현재데이터백업_${this.lastModified}.xlsx` : `시그니처목록_업로드빈양식_${this.lastModified}.xlsx`;
+            
             try {
                 if (window.showSaveFilePicker) {
                     const handle = await window.showSaveFilePicker({ suggestedName: filename, types: [{ description: 'Excel File', accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] } }] });
@@ -912,7 +940,6 @@ handleFolderUpload(e) {
                     return { top: (rect.top - boardRect.top) * scale, bottom: (rect.bottom - boardRect.top) * scale };
                 });
 
-                // [수정됨] 15000px일 때 35MB가 나왔으므로, 8000px로 줄여서 15~18MB가 나오도록 조정
                 const MAX_HEIGHT = 8000; 
 
                 const saveCanvasPart = async (partCanvas, filename) => {
