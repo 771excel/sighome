@@ -140,12 +140,12 @@
                             </h3>
                             <div class="space-y-3">
                                 <div>
-                                    <label class="text-xs font-bold text-purple-800 mb-1 block">이미지/GIF 링크 <span class="text-gray-500 font-normal">(입력 시 번호/이름 자동 추출)</span></label>
-                                    <input type="text" x-model="newSigMedia" @input="autoParseLink(newSigMedia)" placeholder="https://..." class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 shadow-sm">
+                                    <label class="text-xs font-bold text-purple-800 mb-1 block">음원 링크 <span class="text-gray-500 font-normal">(자동 이름 추출)</span></label>
+                                    <input type="text" x-model="newSigAudio" @input="autoParseLink()" placeholder="https://..." class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 shadow-sm">
                                 </div>
                                 <div>
-                                    <label class="text-xs font-bold text-purple-800 mb-1 block">음원 링크 (선택)</label>
-                                    <input type="text" x-model="newSigAudio" @input="autoParseLink(newSigAudio)" placeholder="https://..." class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 shadow-sm">
+                                    <label class="text-xs font-bold text-purple-800 mb-1 block">이미지/GIF 링크 <span class="text-gray-500 font-normal">(번호 추출)</span></label>
+                                    <input type="text" x-model="newSigMedia" @input="autoParseLink()" placeholder="https://..." class="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-purple-500 shadow-sm">
                                 </div>
                                 <div class="flex gap-2">
                                     <div class="w-1/3">
@@ -349,7 +349,7 @@
                             
                             <div class="flex gap-3 items-center">
                                 <div class="relative group w-16 h-9 shrink-0 cursor-pointer" @click="if(item.isGif) openGifModal(item)">
-                                    <img :src="item.imgUrl" decoding="async" class="w-full h-full rounded object-cover border border-gray-300" alt="">
+                                    <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full rounded object-cover border border-gray-300" alt="">
                                     <div x-show="item.isGif" class="absolute inset-0 bg-black/60 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition text-[10px] rounded font-bold leading-tight">
                                         <span>🔍<br>설정</span>
                                     </div>
@@ -420,7 +420,7 @@
                                 <template x-for="item in newItems" :key="item.id">
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                         <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]">
-                                            <img :src="item.imgUrl" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                            <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
                                             <div class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                             <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                 <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 GIF 프레임 설정</span>
@@ -454,7 +454,7 @@
                                         <template x-for="item in getEventItems(event.targets)" :key="item.id">
                                             <div class="flex flex-col items-center gap-3 w-full avoid-break">
                                                 <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
-                                                    <img :src="item.imgUrl" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                                    <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
                                                     <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                                     <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                         <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
@@ -491,7 +491,7 @@
                                 <template x-for="item in getItemsByGroup(group.id)" :key="item.id">
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                         <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group hover:border-gray-400" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-600' : 'border-gray-300')">
-                                            <img :src="item.imgUrl" decoding="async" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                            <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
                                             <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                             <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                 <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
@@ -530,7 +530,7 @@
                                     <template x-for="item in getPersonalItemsByMember(member.id)" :key="item.id">
                                         <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                             <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-blue-400/50' : 'border-blue-400')">
-                                                <img :src="item.imgUrl" decoding="async" class="w-full h-full object-cover">
+                                                <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover">
                                                 <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                                 <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                     <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
@@ -568,7 +568,7 @@
                             <template x-for="item in getUnassignedPersonalItems()" :key="item.id">
                                 <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
-                                        <img :src="item.imgUrl" decoding="async" class="w-full h-full object-cover">
+                                        <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover">
                                         <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
                                         <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                             <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
