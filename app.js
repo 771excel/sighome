@@ -25,6 +25,7 @@ document.addEventListener('alpine:init', () => {
         gifInstance: null,
         gifInterval: null,
         isGifLoading: false,
+        isGifReady: false,    // [추가됨] UI 활성화를 위한 명시적 상태 변수
         gifTotalFrames: 0,
         gifCurrentFrame: 0,
         isPlaying: false,
@@ -758,14 +759,26 @@ document.addEventListener('alpine:init', () => {
         },
 
         openGifModal(item) {
-            this.modalItem = item; this.modalOpen = true; this.gifTotalFrames = 0; this.gifCurrentFrame = 0; this.isGifLoading = false; this.isPlaying = false;
+            this.modalItem = item; 
+            this.modalOpen = true; 
+            this.gifTotalFrames = 0; 
+            this.gifCurrentFrame = 0; 
+            this.isGifLoading = false; 
+            this.isPlaying = false;
+            this.isGifReady = false; // [추가됨] 초기화
             if(this.gifInterval) clearInterval(this.gifInterval);
             if (item.isGif && !item.isFrozen) this.$nextTick(() => { this.initSuperGif(); });
         },
+        
         async initSuperGif() {
             if (typeof SuperGif === 'undefined') return;
             this.isGifLoading = true;
-            const container = document.getElementById('modal_gif_container');
+            this.isGifReady = false;
+            
+            // [핵심 픽스] Alpine DOM 파괴를 막기 위해 내부 전용 wrapper에만 캔버스를 주입합니다.
+            const wrapper = document.getElementById('supergif_wrapper');
+            wrapper.innerHTML = ''; 
+            
             let targetUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             let objectUrl = null;
 
@@ -776,35 +789,53 @@ document.addEventListener('alpine:init', () => {
                 objectUrl = URL.createObjectURL(blob); targetUrl = objectUrl;
             } catch (e) { console.warn("CORS 우회 fetch 실패", e); }
             
-            container.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
+            const crossOriginAttr = targetUrl.startsWith('blob:') ? '' : 'crossorigin="anonymous"';
+            wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" ${crossOriginAttr} rel:auto_play="0" style="display:none;" />`;
             const img = document.getElementById('modal_gif_target');
             
             const fallbackTimer = setTimeout(() => {
                 if(this.isGifLoading) {
-                    this.isGifLoading = false; this.showToast('GIF 파일 분석 지연, 기본 모드 전환.');
+                    this.isGifLoading = false; 
+                    this.isGifReady = false; // fallback 발생 시 컨트롤러 숨김
+                    this.showToast('GIF 파일 분석 지연, 기본 모드 전환.');
                     if(this.gifInstance) this.gifInstance = null;
-                    container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                    wrapper.innerHTML = '';
                     if (objectUrl) URL.revokeObjectURL(objectUrl);
                 }
             }, 20000);
 
             try {
-                this.gifInstance = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
-                this.gifInstance.load(() => {
-                    clearTimeout(fallbackTimer); this.isGifLoading = false;
-                    const length = this.gifInstance.get_length();
+                const sg = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
+                this.gifInstance = sg;
+                
+                sg.load(() => {
+                    clearTimeout(fallbackTimer); 
+                    this.isGifLoading = false;
+                    const length = sg.get_length();
                     if(length === 0) {
                         this.showToast('GIF 프레임 분석 불가 규격입니다.');
-                        this.gifInstance = null; container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                        this.gifInstance = null; 
+                        this.isGifReady = false;
+                        wrapper.innerHTML = '';
                         if (objectUrl) URL.revokeObjectURL(objectUrl);
                         return;
                     }
-                    this.gifTotalFrames = length; this.gifCurrentFrame = 0; this.isPlaying = true; this.gifInstance.play();
-                    this.gifInterval = setInterval(() => { if(this.isPlaying && this.gifInstance) this.gifCurrentFrame = this.gifInstance.get_current_frame(); }, 50);
+                    this.gifTotalFrames = length; 
+                    this.gifCurrentFrame = 0; 
+                    this.isPlaying = true; 
+                    this.isGifReady = true; // [핵심] 준비 완료 상태값을 트리거하여 UI 활성화
+                    sg.play();
+                    this.gifInterval = setInterval(() => { 
+                        if(this.isPlaying && this.gifInstance) {
+                            this.gifCurrentFrame = sg.get_current_frame(); 
+                        }
+                    }, 50);
                 });
             } catch (e) {
-                clearTimeout(fallbackTimer); this.isGifLoading = false;
-                container.innerHTML = `<img id="modal_img_preview" src="${this.modalItem.originalGifUrl || this.modalItem.imgUrl}" class="w-full max-h-[50vh] object-contain">`;
+                clearTimeout(fallbackTimer); 
+                this.isGifLoading = false;
+                this.isGifReady = false;
+                wrapper.innerHTML = '';
                 if (objectUrl) URL.revokeObjectURL(objectUrl);
             }
         },
@@ -812,7 +843,8 @@ document.addEventListener('alpine:init', () => {
             this.modalOpen = false; this.modalItem = null;
             if(this.gifInterval) clearInterval(this.gifInterval);
             if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
-            document.getElementById('modal_gif_container').innerHTML = ''; 
+            this.isGifReady = false;
+            document.getElementById('supergif_wrapper').innerHTML = ''; 
             this.saveCloudData();
         },
         scrubGif() {
@@ -824,7 +856,7 @@ document.addEventListener('alpine:init', () => {
                 try { this.gifInstance.move_to(targetFrame); } catch(e) {}
             }
         },
-        // [추가됨] 프레임 한 칸씩 앞/뒤로 이동하는 미세조정 스텝 함수
+        // [추가됨] 좌우 프레임 1칸씩 미세조정 함수
         stepFrame(step) {
             if (this.gifInstance && this.gifTotalFrames > 0) {
                 this.isPlaying = false;
@@ -843,13 +875,13 @@ document.addEventListener('alpine:init', () => {
                 else { this.gifInstance.play(); this.isPlaying = true; }
             }
         },
-
-        // [수정됨] 반응성/활성화 문제 해결 및 초경량 캡처 사이즈(350px) 적용
+        
+        // [수정됨] 캡처 사이즈 350px 초경량 압축 및 배열 반응성 동기화
         async captureModalFrame() {
             if (!this.modalItem) return;
             let sourceCanvas;
             
-            if (this.gifInstance && this.gifTotalFrames > 0) {
+            if (this.isGifReady && this.gifInstance && this.gifTotalFrames > 0) {
                 this.gifInstance.pause(); this.isPlaying = false; 
                 sourceCanvas = this.gifInstance.get_canvas();
             } else {
@@ -867,7 +899,6 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            // 아주 얇은 썸네일 사이즈로 강제 리사이징 (DB 보호 및 렉 제거)
             const MAX_W = 350; 
             let width = sourceCanvas.width; 
             let height = sourceCanvas.height; 
@@ -884,10 +915,9 @@ document.addEventListener('alpine:init', () => {
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
             try {
-                // 초경량 webp 포맷 0.7 퀄리티 적용
                 const dataUrl = outCanvas.toDataURL('image/webp', 0.7); 
                 
-                // Alpine 반응성을 강제로 트리거하기 위해 배열에 명시적 업데이트
+                // Alpine 반응성 강제 트리거 (즉시 UI 업데이트)
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
                 if (targetIdx !== -1) {
                     this.items[targetIdx].imgUrl = dataUrl;
@@ -896,7 +926,6 @@ document.addEventListener('alpine:init', () => {
                     this.items[targetIdx].originalGifUrl = this.modalItem.originalGifUrl;
                 }
                 
-                // 모달 뷰 반영
                 this.modalItem.imgUrl = dataUrl; 
                 this.modalItem.frozenDataUrl = dataUrl; 
                 this.modalItem.isFrozen = true;
@@ -907,11 +936,12 @@ document.addEventListener('alpine:init', () => {
                 this.showToast("🚨 보안(CORS) 정책 때문에 캡처할 수 없는 이미지입니다.");
             }
         },
-
+        
         resetModalFrame() {
             if (!this.modalItem) return;
             if (this.modalItem.originalGifUrl) {
                 this.modalItem.imgUrl = this.modalItem.originalGifUrl;
+                // 반응성 동기화
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
                 if (targetIdx !== -1) {
                     this.items[targetIdx].imgUrl = this.modalItem.originalGifUrl;
@@ -921,10 +951,10 @@ document.addEventListener('alpine:init', () => {
             }
             this.modalItem.isFrozen = false; 
             this.modalItem.frozenDataUrl = null;
+            this.isGifReady = false;
             if(this.gifInterval) clearInterval(this.gifInterval);
             this.$nextTick(() => { this.initSuperGif(); });
         },
-        
         downloadCurrentModalFrame() {
             if(!this.modalItem || !this.modalItem.frozenDataUrl) return;
             this.triggerDownload(this.modalItem.frozenDataUrl, `${this.modalItem.id}_${this.cleanName(this.modalItem.name)}_캡처.png`);
