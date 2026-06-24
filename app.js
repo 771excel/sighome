@@ -39,6 +39,8 @@ document.addEventListener('alpine:init', () => {
 
         newEventTitle: '',
         newEventTargets: '',
+        newEventColor: '#F59E0B', // 이벤트 그룹 색상 추가
+        
         newMemberName: '',
         
         activeAddTab: 'folder',
@@ -196,6 +198,15 @@ document.addEventListener('alpine:init', () => {
             this.newSigMedia = '';
             this.newSigAudio = '';
             this.showToast(`✨ ${id}번 시그니처가 성공적으로 반영되었습니다.`);
+        },
+
+        // 개별 시그니처 삭제 기능 추가
+        removeItem(id) {
+            if (confirm(`${id}번 시그니처를 정말 삭제하시겠습니까?`)) {
+                this.items = this.items.filter(i => i.id !== id);
+                this.saveCloudData();
+                this.showToast(`🗑️ ${id}번 시그니처가 삭제되었습니다.`);
+            }
         },
 
         updateMediaUrl(item) {
@@ -358,26 +369,21 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // [핵심 추가] 외부 이미지를 CORS 에러 없이 로드하기 위해 강제 Blob화 (프록시 우회)
         async fetchImageAsBlobUrl(url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
-            
             try {
-                // 1. 직접 접근 시도 (CORS 허용된 서버일 경우)
                 let res = await fetch(url, { mode: 'cors', cache: 'no-store' }).catch(() => null);
                 if (res && res.ok) return URL.createObjectURL(await res.blob());
                 
-                // 2. 우회 프록시 1 시도 (allorigins)
                 let proxyUrl1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
                 res = await fetch(proxyUrl1, { mode: 'cors', cache: 'no-store' }).catch(() => null);
                 if (res && res.ok) return URL.createObjectURL(await res.blob());
 
-                // 3. 우회 프록시 2 시도 (corsproxy.io)
                 let proxyUrl2 = 'https://corsproxy.io/?' + encodeURIComponent(url);
                 res = await fetch(proxyUrl2, { mode: 'cors', cache: 'no-store' }).catch(() => null);
                 if (res && res.ok) return URL.createObjectURL(await res.blob());
 
-                return url; // 모든 시도 실패 시 원본 링크 반환
+                return url; 
             } catch (e) {
                 return url;
             }
@@ -684,7 +690,7 @@ document.addEventListener('alpine:init', () => {
                         audioUrl = this.upgradeHttps(audioUrl);
                         mediaUrl = this.upgradeHttps(mediaUrl);
 
-                        let isNewMark = row1[7] && String(row1[7]).trim() === "NEW";
+                        let isNewMark = row1[5] && String(row1[5]).trim() === "NEW"; // 컬럼 위치 수정 반영
                         let itemNameStr = String(row1[1] || `${id}번 시그니처`);
                         
                         let cleanName = itemNameStr.replace(/^\d+[_.\-\s]+/, '').trim() || `${id}번 시그니처`;
@@ -751,9 +757,31 @@ document.addEventListener('alpine:init', () => {
         
         addMember() { if(!this.newMemberName.trim()) return; this.members.push({ id: 'm_' + Date.now(), name: this.newMemberName.trim() }); this.newMemberName = ''; this.saveCloudData(); },
         reorderMembers(oldIndex, newIndex) { const moved = this.members.splice(oldIndex, 1)[0]; this.members.splice(newIndex, 0, moved); this.saveCloudData(); },
-        removeMember(id) { this.members = this.members.filter(m => m.id !== id); this.items.forEach(item => { if(item.memberId === id) item.memberId = ''; }); this.saveCloudData(); },
         
-        addEvent() { if(!this.newEventTitle.trim()) return; this.events.push({ id: 'e_' + Date.now(), title: this.newEventTitle.trim(), targets: this.newEventTargets.trim() }); this.newEventTitle = ''; this.newEventTargets = ''; this.saveCloudData(); },
+        // 개인시그 삭제 시 종속된 시그니처들 동시 삭제 확인 추가
+        removeMember(id) { 
+            const member = this.members.find(m => m.id === id);
+            const associatedItems = this.items.filter(i => i.memberId === id);
+            
+            if (associatedItems.length > 0) {
+                const itemIds = associatedItems.map(i => i.id).join(', ');
+                const confirmMsg = `[ ${member.name} ] 멤버를 삭제하시겠습니까?\n이 멤버에 지정된 시그니처 단가 [ ${itemIds} ] 도 함께 삭제됩니다.\n\n삭제를 진행하시려면 '확인'을 눌러주세요.`;
+                if (!confirm(confirmMsg)) return;
+                
+                this.items = this.items.filter(i => i.memberId !== id);
+            } else {
+                if (!confirm(`[ ${member.name} ] 멤버를 삭제하시겠습니까?`)) return;
+            }
+
+            this.members = this.members.filter(m => m.id !== id);
+            this.saveCloudData(); 
+        },
+        
+        addEvent() { 
+            if(!this.newEventTitle.trim()) return; 
+            this.events.push({ id: 'e_' + Date.now(), title: this.newEventTitle.trim(), targets: this.newEventTargets.trim(), color: this.newEventColor }); 
+            this.newEventTitle = ''; this.newEventTargets = ''; this.newEventColor = '#F59E0B'; this.saveCloudData(); 
+        },
         removeEvent(id) { this.events = this.events.filter(e => e.id !== id); this.saveCloudData(); },
 
         getItemsByGroup(groupId) { return this.items.filter(i => i.groupId === groupId && !i.isPersonal); },
@@ -783,7 +811,6 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        // [핵심 변경] 모달 오픈 시 프록시 엔진을 통해 이미지를 미리 무해한 Blob 형태로 캐싱하여 모든 CORS 에러 원천 차단
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
@@ -799,7 +826,6 @@ document.addEventListener('alpine:init', () => {
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
-            // 프록시를 통해 Blob 객체로 완전 전환
             let safeUrl = await this.fetchImageAsBlobUrl(originalUrl);
             this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
             
@@ -818,7 +844,6 @@ document.addEventListener('alpine:init', () => {
             const wrapper = document.getElementById('supergif_wrapper');
             wrapper.innerHTML = ''; 
             
-            // Blob URL이므로 crossorigin 제약으로부터 자유로움
             wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
             const img = document.getElementById('modal_gif_target');
             
@@ -910,7 +935,6 @@ document.addEventListener('alpine:init', () => {
             }
         },
         
-        // 캔버스 Taint 원천 차단으로 무결점 캡처 지원
         async captureModalFrame() {
             if (!this.modalItem) return;
             let sourceCanvas;
@@ -1014,11 +1038,15 @@ document.addEventListener('alpine:init', () => {
             document.body.removeChild(textArea);
         },
 
+        // 엑셀 출력 부분 수정 (구분 순서 변경 및 필터 적용)
         async exportExcel(includeData = false) {
             if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
             const data = []; const merges = [];
-            data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]); merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
-            data.push(["번호", "시그니처 이름", "구분", "링크", "비고 (개인)", "", "", "NEW 표기"]); merges.push({ s: { r: 1, c: 4 }, e: { r: 1, c: 5 } }); 
+            
+            // F컬럼에 NEW 배치
+            data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]); 
+            merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
+            data.push(["번호", "시그니처 이름", "구분", "링크", "비고 (개인)", "NEW 표기", "", ""]); 
 
             let currentRow = 2; 
             this.items.forEach(item => {
@@ -1032,16 +1060,28 @@ document.addEventListener('alpine:init', () => {
                 const audioStr = includeData && item.audioUrl ? item.audioUrl : "";
                 const mediaStr = includeData && item.mediaUrl ? item.mediaUrl : "";
 
-                data.push([item.id, `${item.id} ${this.cleanName(item.name)}`, "음원 외부링크", audioStr, remarks.join(", "), "", "", newMark]);
-                data.push(["", "", "이미지 외부링크", mediaStr, "", "", "", ""]);
+                // 변경사항: 이미지 -> 음원 -> 공백 순서로 삽입, NEW 표기는 F셀(인덱스 5)
+                data.push([item.id, `${item.id} ${this.cleanName(item.name)}`, "이미지 외부링크", mediaStr, remarks.join(", "), newMark, "", ""]);
+                data.push(["", "", "음원 외부링크", audioStr, "", "", "", ""]);
                 data.push(["", "", "", "", "", "", "", ""]);
 
-                merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } }, { s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } }, { s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } }, { s: { r: currentRow, c: 7 }, e: { r: currentRow + 1, c: 7 } });
+                // 병합 위치도 F열에 맞게 수정
+                merges.push(
+                    { s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } }, 
+                    { s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } }, 
+                    { s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } }, 
+                    { s: { r: currentRow, c: 5 }, e: { r: currentRow + 1, c: 5 } }
+                );
                 currentRow += 3;
             });
 
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(data);
-            ws['!merges'] = merges; ws['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 15 }, { wch: 60 }, { wch: 20 }, { wch: 10 }, { wch: 10 }, { wch: 15 }];
+            ws['!merges'] = merges; 
+            ws['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 15 }, { wch: 60 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 10 }];
+            
+            // 필터 추가 (A2부터 F마지막줄까지)
+            ws['!autofilter'] = { ref: `A2:F${currentRow - 1}` };
+
             for (let cellAddress in ws) {
                 if (cellAddress[0] === '!') continue;
                 const col = cellAddress.replace(/[0-9]/g, ''); const row = parseInt(cellAddress.replace(/\D/g, '')) - 1; 
@@ -1049,7 +1089,7 @@ document.addEventListener('alpine:init', () => {
                 ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11 };
                 if (col === 'A' || col === 'B' || col === 'C') ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
                 if (row === 0) { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 14, bold: true }; }
-                if (col === 'H') { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, color: { rgb: "FF0000" }, bold: true }; }
+                if (col === 'F') { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, color: { rgb: "FF0000" }, bold: true }; }
             }
             XLSX.utils.book_append_sheet(wb, ws, "시그니처 목록");
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
