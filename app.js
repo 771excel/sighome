@@ -29,6 +29,8 @@ document.addEventListener('alpine:init', () => {
         gifTotalFrames: 0,
         gifCurrentFrame: 0,
         isPlaying: false,
+        
+        globalVolume: 0.5, // 메인 볼륨 컨트롤 상태 추가
 
         newGroupName: '',
         newGroupStart: '',
@@ -39,7 +41,7 @@ document.addEventListener('alpine:init', () => {
 
         newEventTitle: '',
         newEventTargets: '',
-        newEventColor: '#F59E0B', // 이벤트 그룹 색상 추가
+        newEventColor: '#F59E0B', 
         
         newMemberName: '',
         
@@ -200,7 +202,6 @@ document.addEventListener('alpine:init', () => {
             this.showToast(`✨ ${id}번 시그니처가 성공적으로 반영되었습니다.`);
         },
 
-        // 개별 시그니처 삭제 기능 추가
         removeItem(id) {
             if (confirm(`${id}번 시그니처를 정말 삭제하시겠습니까?`)) {
                 this.items = this.items.filter(i => i.id !== id);
@@ -233,6 +234,10 @@ document.addEventListener('alpine:init', () => {
                 item.hasAudio = false;
             }
             this.saveCloudData();
+        },
+        
+        updateVolume() {
+            document.querySelectorAll('audio').forEach(a => a.volume = this.globalVolume);
         },
 
         showToast(msg) {
@@ -732,7 +737,11 @@ document.addEventListener('alpine:init', () => {
             if(!item.audioUrl) return;
             const audio = document.getElementById('audio_player_' + item.id);
             if(audio) {
-                if(audio.paused) { document.querySelectorAll('audio').forEach(a => a.pause()); audio.play(); } 
+                if(audio.paused) { 
+                    document.querySelectorAll('audio').forEach(a => a.pause()); 
+                    audio.volume = this.globalVolume;
+                    audio.play(); 
+                } 
                 else audio.pause();
             } else this.showToast("오디오 파일을 찾을 수 없습니다.");
         },
@@ -758,7 +767,6 @@ document.addEventListener('alpine:init', () => {
         addMember() { if(!this.newMemberName.trim()) return; this.members.push({ id: 'm_' + Date.now(), name: this.newMemberName.trim() }); this.newMemberName = ''; this.saveCloudData(); },
         reorderMembers(oldIndex, newIndex) { const moved = this.members.splice(oldIndex, 1)[0]; this.members.splice(newIndex, 0, moved); this.saveCloudData(); },
         
-        // 개인시그 삭제 시 종속된 시그니처들 동시 삭제 확인 추가
         removeMember(id) { 
             const member = this.members.find(m => m.id === id);
             const associatedItems = this.items.filter(i => i.memberId === id);
@@ -1038,15 +1046,14 @@ document.addEventListener('alpine:init', () => {
             document.body.removeChild(textArea);
         },
 
-        // 엑셀 출력 부분 수정 (구분 순서 변경 및 필터 적용)
+        // 엑셀 출력 완전 재설계 (단일 행(Row) 구조)
         async exportExcel(includeData = false) {
             if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
             const data = []; const merges = [];
             
-            // F컬럼에 NEW 배치
-            data.push(["771 시그니처 외부링크 목록", "", "", "", "", "", "", ""]); 
-            merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }); 
-            data.push(["번호", "시그니처 이름", "구분", "링크", "비고 (개인)", "NEW 표기", "", ""]); 
+            data.push(["771 시그니처 외부링크 목록", "", "", "", "", ""]); 
+            merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }); 
+            data.push(["번호", "시그니처 이름", "이미지 외부링크", "음원 외부링크", "비고 (개인)", "NEW 표기"]); 
 
             let currentRow = 2; 
             this.items.forEach(item => {
@@ -1060,26 +1067,23 @@ document.addEventListener('alpine:init', () => {
                 const audioStr = includeData && item.audioUrl ? item.audioUrl : "";
                 const mediaStr = includeData && item.mediaUrl ? item.mediaUrl : "";
 
-                // 변경사항: 이미지 -> 음원 -> 공백 순서로 삽입, NEW 표기는 F셀(인덱스 5)
-                data.push([item.id, `${item.id} ${this.cleanName(item.name)}`, "이미지 외부링크", mediaStr, remarks.join(", "), newMark, "", ""]);
-                data.push(["", "", "음원 외부링크", audioStr, "", "", "", ""]);
-                data.push(["", "", "", "", "", "", "", ""]);
-
-                // 병합 위치도 F열에 맞게 수정
-                merges.push(
-                    { s: { r: currentRow, c: 0 }, e: { r: currentRow + 1, c: 0 } }, 
-                    { s: { r: currentRow, c: 1 }, e: { r: currentRow + 1, c: 1 } }, 
-                    { s: { r: currentRow, c: 4 }, e: { r: currentRow + 1, c: 4 } }, 
-                    { s: { r: currentRow, c: 5 }, e: { r: currentRow + 1, c: 5 } }
-                );
-                currentRow += 3;
+                // 모든 데이터를 1개의 열(Row)에 배치
+                data.push([
+                    item.id, 
+                    `${item.id} ${this.cleanName(item.name)}`, 
+                    mediaStr, 
+                    audioStr, 
+                    remarks.join(", "), 
+                    newMark
+                ]);
+                currentRow++;
             });
 
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(data);
             ws['!merges'] = merges; 
-            ws['!cols'] = [{ wch: 8 }, { wch: 40 }, { wch: 15 }, { wch: 60 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 10 }];
+            ws['!cols'] = [{ wch: 8 }, { wch: 35 }, { wch: 60 }, { wch: 60 }, { wch: 20 }, { wch: 15 }];
             
-            // 필터 추가 (A2부터 F마지막줄까지)
+            // 필터 추가
             ws['!autofilter'] = { ref: `A2:F${currentRow - 1}` };
 
             for (let cellAddress in ws) {
@@ -1087,9 +1091,14 @@ document.addEventListener('alpine:init', () => {
                 const col = cellAddress.replace(/[0-9]/g, ''); const row = parseInt(cellAddress.replace(/\D/g, '')) - 1; 
                 if (!ws[cellAddress].s) ws[cellAddress].s = {};
                 ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11 };
-                if (col === 'A' || col === 'B' || col === 'C') ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" };
+                
+                ws[cellAddress].s.alignment = { vertical: "center" };
+                if (['A', 'E', 'F'].includes(col)) ws[cellAddress].s.alignment.horizontal = "center";
+                
                 if (row === 0) { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 14, bold: true }; }
-                if (col === 'F') { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, color: { rgb: "FF0000" }, bold: true }; }
+                if (row === 1) { ws[cellAddress].s.alignment = { horizontal: "center", vertical: "center" }; ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, bold: true }; ws[cellAddress].s.fill = { fgColor: { rgb: "F3F4F6" } }; }
+                
+                if (col === 'F' && row > 1) { ws[cellAddress].s.font = { name: "맑은 고딕", sz: 11, color: { rgb: "FF0000" }, bold: true }; }
             }
             XLSX.utils.book_append_sheet(wb, ws, "시그니처 목록");
             const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
