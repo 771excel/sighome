@@ -374,21 +374,25 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
+        // 새롭게 추가: Cloudflare 이미지 최적화 프록시 적용 함수
+        getOptimizedUrl(url) {
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            return 'https://image-proxy.771excel.workers.dev/?url=' + encodeURIComponent(url);
+        },
+
+        // 수정됨: 프록시를 타도록 교체
         async fetchImageAsBlobUrl(url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
             try {
-                let res = await fetch(url, { mode: 'cors', cache: 'no-store' }).catch(() => null);
-                if (res && res.ok) return URL.createObjectURL(await res.blob());
+                // Cloudflare 프록시를 통해 최적화된 WebP 이미지를 호출
+                const optimizedUrl = this.getOptimizedUrl(url);
                 
-                let proxyUrl1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-                res = await fetch(proxyUrl1, { mode: 'cors', cache: 'no-store' }).catch(() => null);
-                if (res && res.ok) return URL.createObjectURL(await res.blob());
-
-                let proxyUrl2 = 'https://corsproxy.io/?' + encodeURIComponent(url);
-                res = await fetch(proxyUrl2, { mode: 'cors', cache: 'no-store' }).catch(() => null);
-                if (res && res.ok) return URL.createObjectURL(await res.blob());
-
-                return url; 
+                // 프록시에서 이미 CORS를 허용해주므로 바로 fetch 가능
+                let res = await fetch(optimizedUrl, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
+                if (res && res.ok) {
+                    return URL.createObjectURL(await res.blob());
+                }
+                return url; // 실패 시 원본 링크 반환
             } catch (e) {
                 return url;
             }
