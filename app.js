@@ -30,7 +30,7 @@ document.addEventListener('alpine:init', () => {
         gifCurrentFrame: 0,
         isPlaying: false,
         
-        globalVolume: 0.5, // 메인 볼륨 컨트롤 상태 추가
+        globalVolume: 0.5, 
 
         newGroupName: '',
         newGroupStart: '',
@@ -43,6 +43,10 @@ document.addEventListener('alpine:init', () => {
         newEventTargets: '',
         newEventColor: '#F59E0B', 
         
+        // 이벤트 수정 기능 상태값 추가
+        editingEventId: null,
+        editEventData: { title: '', targets: '', color: '' },
+
         newMemberName: '',
         
         activeAddTab: 'folder',
@@ -62,14 +66,15 @@ document.addEventListener('alpine:init', () => {
         zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
         zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
         
+        // 모바일 최적화: 기본 배열(maps[3])을 모바일에서 2줄로 큼직하게 변경
         get zoomGridClass() {
-            if (!this.isViewerMode) return 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
+            if (!this.isViewerMode) return 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
             const maps = {
-                1: 'grid-cols-5 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-11',
-                2: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10',
-                3: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8',
-                4: 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6',
-                5: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+                1: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-11',
+                2: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-8 lg:grid-cols-10',
+                3: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8', // 모바일에서 2열 배치
+                4: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6',
+                5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5'
             };
             return maps[this.zoomLevel] || maps[3];
         },
@@ -374,27 +379,40 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // 새롭게 추가: Cloudflare 이미지 최적화 프록시 적용 함수
         getOptimizedUrl(url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
             return 'https://image-proxy.771excel.workers.dev/?url=' + encodeURIComponent(url);
         },
 
-        // 수정됨: 프록시를 타도록 교체
         async fetchImageAsBlobUrl(url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
             try {
-                // Cloudflare 프록시를 통해 최적화된 WebP 이미지를 호출
                 const optimizedUrl = this.getOptimizedUrl(url);
-                
-                // 프록시에서 이미 CORS를 허용해주므로 바로 fetch 가능
                 let res = await fetch(optimizedUrl, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
                 if (res && res.ok) {
                     return URL.createObjectURL(await res.blob());
                 }
-                return url; // 실패 시 원본 링크 반환
+                return url; 
             } catch (e) {
                 return url;
+            }
+        },
+
+        // GIF 캡처 에러 방지를 위해 원본 GIF 포맷을 유지하는 전용 우회기
+        async fetchRawGifAsBlobUrl(url) {
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            try {
+                let proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                let res = await fetch(proxyUrl, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
+                if (res && res.ok) return URL.createObjectURL(await res.blob());
+                
+                let proxyUrl2 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+                res = await fetch(proxyUrl2, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
+                if (res && res.ok) return URL.createObjectURL(await res.blob());
+
+                return url; 
+            } catch(e) { 
+                return url; 
             }
         },
 
@@ -794,6 +812,21 @@ document.addEventListener('alpine:init', () => {
             this.events.push({ id: 'e_' + Date.now(), title: this.newEventTitle.trim(), targets: this.newEventTargets.trim(), color: this.newEventColor }); 
             this.newEventTitle = ''; this.newEventTargets = ''; this.newEventColor = '#F59E0B'; this.saveCloudData(); 
         },
+        startEditEvent(event) {
+            this.editingEventId = event.id;
+            this.editEventData = { title: event.title, targets: event.targets, color: event.color || '#F59E0B' };
+        },
+        saveEditEvent(id) {
+            const e = this.events.find(x => x.id === id);
+            if(e) {
+                e.title = this.editEventData.title;
+                e.targets = this.editEventData.targets;
+                e.color = this.editEventData.color;
+            }
+            this.editingEventId = null;
+            this.saveCloudData();
+        },
+        cancelEditEvent() { this.editingEventId = null; },
         removeEvent(id) { this.events = this.events.filter(e => e.id !== id); this.saveCloudData(); },
 
         getItemsByGroup(groupId) { return this.items.filter(i => i.groupId === groupId && !i.isPersonal); },
@@ -838,7 +871,8 @@ document.addEventListener('alpine:init', () => {
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
-            let safeUrl = await this.fetchImageAsBlobUrl(originalUrl);
+            // WebP 프록시 우회용 raw GIF 호출 함수 사용
+            let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
             this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
             
             if(previewImg) previewImg.src = safeUrl;
@@ -859,15 +893,16 @@ document.addEventListener('alpine:init', () => {
             wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
             const img = document.getElementById('modal_gif_target');
             
+            // 분석 타임아웃 제한 시간을 60초로 증가 (기존 20초)
             const fallbackTimer = setTimeout(() => {
                 if(this.isGifLoading) {
                     this.isGifLoading = false; 
                     this.isGifReady = false; 
-                    this.showToast('GIF 파일 분석 지연, 기본 모드 전환.');
+                    this.showToast('GIF 파일 용량이 너무 커서 기본 모드로 전환됩니다.');
                     if(this.gifInstance) this.gifInstance = null;
                     wrapper.innerHTML = '';
                 }
-            }, 20000);
+            }, 60000);
 
             try {
                 const sg = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
@@ -1025,7 +1060,7 @@ document.addEventListener('alpine:init', () => {
             if(this.gifInterval) clearInterval(this.gifInterval);
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            let safeUrl = await this.fetchImageAsBlobUrl(originalUrl);
+            let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
             this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
             
             const previewImg = document.getElementById('modal_img_preview');
@@ -1050,7 +1085,6 @@ document.addEventListener('alpine:init', () => {
             document.body.removeChild(textArea);
         },
 
-        // 엑셀 출력 완전 재설계 (단일 행(Row) 구조)
         async exportExcel(includeData = false) {
             if(this.items.length === 0) { this.showToast("출력할 목록이 없습니다."); return; }
             const data = []; const merges = [];
@@ -1071,7 +1105,6 @@ document.addEventListener('alpine:init', () => {
                 const audioStr = includeData && item.audioUrl ? item.audioUrl : "";
                 const mediaStr = includeData && item.mediaUrl ? item.mediaUrl : "";
 
-                // 모든 데이터를 1개의 열(Row)에 배치
                 data.push([
                     item.id, 
                     `${item.id} ${this.cleanName(item.name)}`, 
@@ -1087,7 +1120,6 @@ document.addEventListener('alpine:init', () => {
             ws['!merges'] = merges; 
             ws['!cols'] = [{ wch: 8 }, { wch: 35 }, { wch: 60 }, { wch: 60 }, { wch: 20 }, { wch: 15 }];
             
-            // 필터 추가
             ws['!autofilter'] = { ref: `A2:F${currentRow - 1}` };
 
             for (let cellAddress in ws) {
