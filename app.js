@@ -22,14 +22,7 @@ document.addEventListener('alpine:init', () => {
 
         modalOpen: false,
         modalItem: null,
-        gifInstance: null,
-        gifInterval: null,
-        fallbackTimer: null,
         isGifLoading: false,
-        isGifReady: false, 
-        gifTotalFrames: 0,
-        gifCurrentFrame: 0,
-        isPlaying: false,
         
         globalVolume: 0.5, 
 
@@ -378,28 +371,11 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // 모든 이미지가 무조건 CF 프록시를 통과하여 WebP로 압축/변환되도록 강제하는 핵심 함수
+        // 일반 보드 호출용 (정지된 가벼운 WebP 변환 반환)
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
             return 'https://image-proxy.771excel.workers.dev/?url=' + encodeURIComponent(url);
-        },
-
-        async fetchRawGifAsBlobUrl(url) {
-            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
-            try {
-                let proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
-                let res = await fetch(proxyUrl, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
-                if (res && res.ok) return URL.createObjectURL(await res.blob());
-                
-                let proxyUrl2 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-                res = await fetch(proxyUrl2, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
-                if (res && res.ok) return URL.createObjectURL(await res.blob());
-
-                return url; 
-            } catch(e) { 
-                return url; 
-            }
         },
 
         compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
@@ -842,159 +818,59 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        // GIF 캡처 모달 완전 리뉴얼 로직
+        // 완전 새로 설계된 라이브 스냅샷 스튜디오 로직
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
-            this.gifTotalFrames = 0; 
-            this.gifCurrentFrame = 0; 
-            this.isPlaying = false;
-            this.isGifReady = false; 
-            
-            if(this.gifInterval) clearInterval(this.gifInterval);
-            if(this.fallbackTimer) clearTimeout(this.fallbackTimer);
+            this.isGifLoading = true; 
             
             const previewImg = document.getElementById('modal_img_preview');
-            if(previewImg) previewImg.crossOrigin = "anonymous"; 
+            if(previewImg) {
+                previewImg.src = '';
+                previewImg.crossOrigin = "anonymous";
+            }
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-
-            if (item.isGif && !item.isFrozen) {
-                this.isGifLoading = true;
-                
-                // 10초 내에 분석 실패 시 즉시 실시간 캡처 모드로 전환
-                this.fallbackTimer = setTimeout(() => {
-                    if(this.isGifLoading) {
-                        this.isGifLoading = false; 
-                        this.isGifReady = false; 
-                        this.showToast('고용량 파일 보호를 위해 즉시 캡처 모드로 전환되었습니다.');
-                        if(this.gifInstance) this.gifInstance = null;
-                        document.getElementById('supergif_wrapper').innerHTML = '';
-                    }
-                }, 10000);
-
-                let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
-                
-                if(this.isGifLoading) { // 타임아웃 전에 로드되었다면
-                    this.$nextTick(() => { this.initSuperGif(safeUrl); });
-                }
-            } else {
+            
+            // 프록시 서버에 anim=true를 보내서 애니메이션 WebP를 즉시 받아옵니다.
+            let animProxyUrl = `https://image-proxy.771excel.workers.dev/?anim=true&url=${encodeURIComponent(originalUrl)}`;
+            
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
                 this.isGifLoading = false;
-            }
-        },
-        
-        initSuperGif(targetUrl) {
-            if (typeof SuperGif === 'undefined') return;
-            
-            const wrapper = document.getElementById('supergif_wrapper');
-            wrapper.innerHTML = ''; 
-            
-            wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
-            const img = document.getElementById('modal_gif_target');
-            
-            try {
-                const sg = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
-                this.gifInstance = sg;
-                
-                sg.load(() => {
-                    clearTimeout(this.fallbackTimer); 
-                    this.isGifLoading = false;
-                    const length = sg.get_length();
-                    if(length === 0) {
-                        this.showToast('프레임 분석 불가 규격입니다. 실시간 캡처를 사용하세요.');
-                        this.gifInstance = null; 
-                        this.isGifReady = false;
-                        wrapper.innerHTML = '';
-                        return;
-                    }
-                    this.gifTotalFrames = length; 
-                    this.gifCurrentFrame = 0; 
-                    this.isPlaying = true; 
-                    this.isGifReady = true; 
-                    sg.play();
-                    this.gifInterval = setInterval(() => { 
-                        if(this.isPlaying && this.gifInstance) {
-                            this.gifCurrentFrame = sg.get_current_frame(); 
-                        }
-                    }, 50);
-                });
-            } catch (e) {
-                clearTimeout(this.fallbackTimer); 
+                if(previewImg) previewImg.src = animProxyUrl;
+            };
+            img.onerror = () => {
                 this.isGifLoading = false;
-                this.isGifReady = false;
-                wrapper.innerHTML = '';
-            }
+                this.showToast("🚨 애니메이션 로드에 실패했습니다. (원본 파일 삭제/손상)");
+            };
+            img.src = animProxyUrl;
         },
         
         closeGifModal() {
             this.modalOpen = false; 
-            if (this.modalItem && this.modalItem._tempBlobUrl) {
-                URL.revokeObjectURL(this.modalItem._tempBlobUrl);
-                delete this.modalItem._tempBlobUrl;
-            }
             this.modalItem = null;
-            if(this.gifInterval) clearInterval(this.gifInterval);
-            if(this.fallbackTimer) clearTimeout(this.fallbackTimer);
-            if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
-            this.isGifReady = false;
-            document.getElementById('supergif_wrapper').innerHTML = ''; 
-            this.saveCloudData();
-        },
-        
-        scrubGif() {
-            if (this.gifInstance && this.gifTotalFrames > 0) {
-                this.isPlaying = false; this.gifInstance.pause();
-                let targetFrame = parseInt(this.gifCurrentFrame);
-                if(isNaN(targetFrame) || targetFrame < 0) targetFrame = 0;
-                if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
-                try { this.gifInstance.move_to(targetFrame); } catch(e) {}
-            }
-        },
-        
-        stepFrame(step) {
-            if (this.gifInstance && this.gifTotalFrames > 0) {
-                this.isPlaying = false;
-                this.gifInstance.pause();
-                let targetFrame = parseInt(this.gifCurrentFrame) + step;
-                if(isNaN(targetFrame)) targetFrame = 0;
-                if(targetFrame < 0) targetFrame = 0;
-                if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
-                this.gifCurrentFrame = targetFrame;
-                try { this.gifInstance.move_to(targetFrame); } catch(e) {}
-            }
-        },
-        
-        togglePlay() {
-            if (this.gifInstance && this.gifTotalFrames > 0) {
-                if(this.isPlaying) { this.gifInstance.pause(); this.isPlaying = false; } 
-                else { this.gifInstance.play(); this.isPlaying = true; }
-            }
+            const previewImg = document.getElementById('modal_img_preview');
+            if(previewImg) previewImg.src = '';
         },
         
         async captureModalFrame() {
             if (!this.modalItem) return;
-            let sourceCanvas;
             
-            // 1. 프레임 분석 모드 (SuperGif 성공 시)
-            if (this.isGifReady && this.gifInstance && this.gifTotalFrames > 0) {
-                this.gifInstance.pause(); this.isPlaying = false; 
-                sourceCanvas = this.gifInstance.get_canvas();
-            } 
-            // 2. 실시간 스냅샷 모드 (에러/시간초과로 대체되었을 시)
-            else {
-                const imgElement = document.getElementById('modal_img_preview');
-                if(!imgElement) return;
-                sourceCanvas = document.createElement('canvas'); 
-                sourceCanvas.width = imgElement.naturalWidth || imgElement.width || 400; 
-                sourceCanvas.height = imgElement.naturalHeight || imgElement.height || 300;
-                const ctx = sourceCanvas.getContext('2d'); 
-                ctx.drawImage(imgElement, 0, 0, sourceCanvas.width, sourceCanvas.height);
-            }
-
-            if (!sourceCanvas || sourceCanvas.width === 0) {
-                this.showToast("🚨 이미지를 로드하지 못했습니다. 모달창을 닫고 다시 시도해주세요.");
+            const imgElement = document.getElementById('modal_img_preview');
+            
+            // 이미지 태그에서 현재 눈에 보이는 애니메이션 프레임을 그대로 캔버스에 그립니다. (JS 연산 0)
+            if(!imgElement || !imgElement.complete || imgElement.naturalWidth === 0) {
+                this.showToast("🚨 이미지가 덜 불러와졌습니다. 잠시만 기다려주세요.");
                 return;
             }
+
+            const sourceCanvas = document.createElement('canvas'); 
+            sourceCanvas.width = imgElement.naturalWidth; 
+            sourceCanvas.height = imgElement.naturalHeight;
+            const ctx = sourceCanvas.getContext('2d'); 
+            ctx.drawImage(imgElement, 0, 0, sourceCanvas.width, sourceCanvas.height);
 
             const MAX_W = 350; 
             let width = sourceCanvas.width; 
@@ -1036,7 +912,6 @@ document.addEventListener('alpine:init', () => {
         async resetModalFrame() {
             if (!this.modalItem) return;
             this.isGifLoading = true;
-            this.isGifReady = false;
 
             if (this.modalItem.originalGifUrl) {
                 this.modalItem.imgUrl = this.modalItem.originalGifUrl;
@@ -1049,25 +924,21 @@ document.addEventListener('alpine:init', () => {
             }
             this.modalItem.isFrozen = false; 
             this.modalItem.frozenDataUrl = null;
-            if(this.gifInterval) clearInterval(this.gifInterval);
-            if(this.fallbackTimer) clearTimeout(this.fallbackTimer);
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
+            let animProxyUrl = `https://image-proxy.771excel.workers.dev/?anim=true&url=${encodeURIComponent(originalUrl)}`;
             
-            this.fallbackTimer = setTimeout(() => {
-                if(this.isGifLoading) {
-                    this.isGifLoading = false; 
-                    this.isGifReady = false; 
-                    if(this.gifInstance) this.gifInstance = null;
-                    document.getElementById('supergif_wrapper').innerHTML = '';
-                }
-            }, 10000);
-
-            let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
+            const previewImg = document.getElementById('modal_img_preview');
+            if(previewImg) previewImg.src = '';
             
-            if(this.isGifLoading) {
-                this.$nextTick(() => { this.initSuperGif(safeUrl); });
-            }
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => {
+                this.isGifLoading = false;
+                if(previewImg) previewImg.src = animProxyUrl;
+            };
+            img.src = animProxyUrl;
+            await this.saveCloudData();
         },
         
         downloadCurrentModalFrame() {
