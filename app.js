@@ -22,7 +22,15 @@ document.addEventListener('alpine:init', () => {
 
         modalOpen: false,
         modalItem: null,
+        
+        // 썸네일 스튜디오 상태값
+        gifInstance: null,
+        gifInterval: null,
         isGifLoading: false,
+        isGifReady: false,
+        gifTotalFrames: 0,
+        gifCurrentFrame: 0,
+        isPlaying: false,
         
         globalVolume: 0.5, 
 
@@ -374,58 +382,13 @@ document.addEventListener('alpine:init', () => {
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+            // n=-1 옵션을 통해 메인 보드에서는 쾌적하게 애니메이션 WebP로 렌더링
             return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=-1&q=80`;
-        },
-
-        compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
-            return new Promise(resolve => {
-                if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
-                if(dataUrl.length < 20000) return resolve(dataUrl); 
-
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    
-                    if(width > maxWidth) {
-                        height = Math.round(height * (maxWidth / width));
-                        width = maxWidth;
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-                    
-                    resolve(canvas.toDataURL('image/webp', quality));
-                };
-                img.onerror = () => resolve(dataUrl);
-                img.src = dataUrl;
-            });
         },
 
         async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
-            let needsCompression = false;
-            for (let i of this.items) {
-                if ((i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) || 
-                    (i.mediaUrl && i.mediaUrl.startsWith('data:image/') && i.mediaUrl.length > 30000)) {
-                    needsCompression = true; break;
-                }
-            }
-
-            if (needsCompression) {
-                this.showToast("☁️ 데이터베이스 최적화 중... (화면이 잠시 멈출 수 있습니다)");
-                for (let i of this.items) {
-                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) {
-                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl, 0.6, 250);
-                        if (i.imgUrl && i.imgUrl.startsWith('data:image/') && i.imgUrl.length > 30000) i.imgUrl = i.frozenDataUrl;
-                    }
-                }
-            }
-
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
             
             const itemConfigs = this.items.map(i => ({
@@ -637,7 +600,6 @@ document.addEventListener('alpine:init', () => {
             this.showToast("✅ 폴더 파일이 안전하게 업로드 및 저장되었습니다.");
         },
 
-        // PC 캡처본(이름에 숫자가 포함된 이미지)을 드래그해서 일괄 덮어쓰기하는 기능
         async handleManualThumbnailUpload(e) {
             const files = e.target.files;
             if (!files || files.length === 0) return;
@@ -684,13 +646,12 @@ document.addEventListener('alpine:init', () => {
 
             if (successCount > 0) {
                 await this.saveCloudData();
-                this.showToast(`✅ ${successCount}개의 썸네일이 성공적으로 매칭 및 고정되었습니다! (실패/미등록: ${failCount}개)`);
+                this.showToast(`✅ ${successCount}개의 썸네일이 성공적으로 매칭 및 고정되었습니다!`);
             } else {
-                this.showToast("🚨 일치하는 시그니처 번호를 찾지 못했거나 압축에 실패했습니다.");
+                this.showToast("🚨 일치하는 번호를 찾지 못했거나 압축에 실패했습니다.");
             }
         },
 
-        // 수동 업로드용 초경량 썸네일 압축기 (Firebase DB 용량 초과 방지)
         compressDataUrlForThumbnail(blobUrl) {
             return new Promise((resolve, reject) => {
                 const img = new Image();
@@ -710,7 +671,7 @@ document.addEventListener('alpine:init', () => {
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    resolve(canvas.toDataURL('image/webp', 0.7)); // 10~20KB 내외의 가벼운 webp로 압축
+                    resolve(canvas.toDataURL('image/webp', 0.7)); 
                 };
                 img.onerror = reject;
                 img.src = blobUrl;
@@ -897,58 +858,125 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-// GIF 스튜디오 실행 (Worker 없이 직접 애니메이션 호출)
+        // 🔥 프레임 스크러버(프레임 바) 기능 완벽 부활 🔥
+        // 해상도를 w=400으로 줄인 GIF를 libgif에 먹여서 메모리 폭발 완벽 차단
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
-            this.isGifLoading = true; 
+            this.gifTotalFrames = 0; 
+            this.gifCurrentFrame = 0; 
+            this.isPlaying = false;
+            this.isGifReady = false; 
+            this.isGifLoading = true;
             
-            const previewImg = document.getElementById('modal_img_preview');
-            if(previewImg) {
-                previewImg.src = '';
-                previewImg.crossOrigin = "anonymous";
-            }
+            if(this.gifInterval) clearInterval(this.gifInterval);
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
-            // 🔥 메인 뷰어와 동일하게 애니메이션 WebP로 불러오기
-            let animProxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=webp&n=-1&q=80`;
+            // 핵심: 원본 사이즈 그대로 로드하면 OOM(메모리 터짐) 발생!
+            // wsrv.nl을 통해 GIF 확장자를 유지하면서 가로 400px로 확 줄인 뼈대 GIF를 생성합니다.
+            let optimizedGifUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=gif&n=-1&w=400`;
             
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => {
+            this.$nextTick(() => {
+                this.initSuperGif(optimizedGifUrl);
+            });
+        },
+        
+        initSuperGif(targetUrl) {
+            if (typeof SuperGif === 'undefined') return;
+            
+            const wrapper = document.getElementById('supergif_wrapper');
+            wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
+            const img = document.getElementById('modal_gif_target');
+            
+            try {
+                // 해상도를 낮춘 GIF이므로 메모리 걱정 없이 쾌적하게 로드됩니다.
+                const sg = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 500 });
+                this.gifInstance = sg;
+                
+                sg.load(() => {
+                    this.isGifLoading = false;
+                    const length = sg.get_length();
+                    if(length === 0) {
+                        this.showToast('GIF 프레임 분석에 실패했습니다.');
+                        this.gifInstance = null; 
+                        this.isGifReady = false;
+                        wrapper.innerHTML = '';
+                        return;
+                    }
+                    this.gifTotalFrames = length; 
+                    this.gifCurrentFrame = 0; 
+                    this.isPlaying = true; 
+                    this.isGifReady = true; 
+                    sg.play();
+                    
+                    this.gifInterval = setInterval(() => { 
+                        if(this.isPlaying && this.gifInstance) {
+                            this.gifCurrentFrame = sg.get_current_frame(); 
+                        }
+                    }, 50);
+                });
+            } catch (e) {
                 this.isGifLoading = false;
-                if(previewImg) previewImg.src = animProxyUrl;
-            };
-            img.onerror = () => {
-                this.isGifLoading = false;
-                this.showToast("🚨 애니메이션 로드에 실패했습니다. 원본 링크를 확인해주세요.");
-            };
-            img.src = animProxyUrl;
+                this.isGifReady = false;
+                wrapper.innerHTML = '';
+                this.showToast('GIF 디코딩 중 에러가 발생했습니다.');
+            }
         },
         
         closeGifModal() {
             this.modalOpen = false; 
             this.modalItem = null;
-            const previewImg = document.getElementById('modal_img_preview');
-            if(previewImg) previewImg.src = '';
+            if(this.gifInterval) clearInterval(this.gifInterval);
+            if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
+            this.isGifReady = false;
+            document.getElementById('supergif_wrapper').innerHTML = ''; 
+        },
+
+        scrubGif() {
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                this.isPlaying = false; 
+                this.gifInstance.pause();
+                let targetFrame = parseInt(this.gifCurrentFrame);
+                if(isNaN(targetFrame) || targetFrame < 0) targetFrame = 0;
+                if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
+                try { this.gifInstance.move_to(targetFrame); } catch(e) {}
+            }
+        },
+        
+        stepFrame(step) {
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                this.isPlaying = false;
+                this.gifInstance.pause();
+                let targetFrame = parseInt(this.gifCurrentFrame) + step;
+                if(isNaN(targetFrame)) targetFrame = 0;
+                if(targetFrame < 0) targetFrame = 0;
+                if(targetFrame >= this.gifTotalFrames) targetFrame = this.gifTotalFrames - 1;
+                this.gifCurrentFrame = targetFrame;
+                try { this.gifInstance.move_to(targetFrame); } catch(e) {}
+            }
+        },
+        
+        togglePlay() {
+            if (this.gifInstance && this.gifTotalFrames > 0) {
+                if(this.isPlaying) { this.gifInstance.pause(); this.isPlaying = false; } 
+                else { this.gifInstance.play(); this.isPlaying = true; }
+            }
         },
         
         async captureModalFrame() {
-            if (!this.modalItem) return;
+            if (!this.modalItem || !this.gifInstance || !this.isGifReady) return;
             
-            const imgElement = document.getElementById('modal_img_preview');
+            // 현재 재생을 멈추고 해당 캔버스를 그대로 캡처합니다.
+            this.gifInstance.pause(); 
+            this.isPlaying = false; 
             
-            if(!imgElement || !imgElement.complete || imgElement.naturalWidth === 0) {
-                this.showToast("🚨 이미지가 덜 불러와졌습니다. 잠시만 기다려주세요.");
+            const sourceCanvas = this.gifInstance.get_canvas();
+
+            if (!sourceCanvas || sourceCanvas.width === 0) {
+                this.showToast("🚨 이미지를 로드하지 못했습니다.");
                 return;
             }
-
-            const sourceCanvas = document.createElement('canvas'); 
-            sourceCanvas.width = imgElement.naturalWidth; 
-            sourceCanvas.height = imgElement.naturalHeight;
-            const ctx = sourceCanvas.getContext('2d'); 
-            ctx.drawImage(imgElement, 0, 0, sourceCanvas.width, sourceCanvas.height);
 
             const MAX_W = 350; 
             let width = sourceCanvas.width; 
@@ -966,6 +994,7 @@ document.addEventListener('alpine:init', () => {
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
             try {
+                // 정확히 멈춘 그 1프레임을 10~30KB의 초경량 WebP로 압축
                 const dataUrl = outCanvas.toDataURL('image/webp', 0.7); 
                 
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
@@ -980,7 +1009,7 @@ document.addEventListener('alpine:init', () => {
                 this.modalItem.frozenDataUrl = dataUrl; 
                 this.modalItem.isFrozen = true;
                 
-                this.showToast("✅ 원하는 순간이 완벽하게 캡처 및 고정되었습니다!");
+                this.showToast("✅ 정확한 프레임이 완벽하게 캡처 및 고정되었습니다!");
                 await this.saveCloudData();
             } catch (err) {
                 this.showToast("🚨 알 수 없는 오류로 캡처를 실패했습니다.");
@@ -990,6 +1019,7 @@ document.addEventListener('alpine:init', () => {
         async resetModalFrame() {
             if (!this.modalItem) return;
             this.isGifLoading = true;
+            this.isGifReady = false;
 
             if (this.modalItem.originalGifUrl) {
                 this.modalItem.imgUrl = this.modalItem.originalGifUrl;
@@ -1002,20 +1032,14 @@ document.addEventListener('alpine:init', () => {
             }
             this.modalItem.isFrozen = false; 
             this.modalItem.frozenDataUrl = null;
+            if(this.gifInterval) clearInterval(this.gifInterval);
+            if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
+            document.getElementById('supergif_wrapper').innerHTML = ''; 
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            let animProxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=webp&n=-1&q=80`;
+            let optimizedGifUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=gif&n=-1&w=400`;
             
-            const previewImg = document.getElementById('modal_img_preview');
-            if(previewImg) previewImg.src = '';
-            
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.onload = () => {
-                this.isGifLoading = false;
-                if(previewImg) previewImg.src = animProxyUrl;
-            };
-            img.src = animProxyUrl;
+            this.$nextTick(() => { this.initSuperGif(optimizedGifUrl); });
             await this.saveCloudData();
         },
         
