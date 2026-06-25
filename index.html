@@ -10,6 +10,7 @@
     
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/buzzfeed/libgif-js@master/libgif.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
@@ -660,31 +661,44 @@
     <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity" style="display: none;" @click="if($event.target === $el) closeGifModal()">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-[800px] max-w-[90vw] flex flex-col gap-6" @click.stop>
             <div class="flex justify-between items-center border-b pb-4 dark:border-gray-700">
-                <h2 class="text-2xl font-black text-gray-800 dark:text-white" x-text="modalItem ? `[ No.${modalItem.id} ] 라이브 프레임 스튜디오` : ''"></h2>
+                <h2 class="text-2xl font-black text-gray-800 dark:text-white" x-text="modalItem ? `[ No.${modalItem.id} ] 정밀 썸네일 캡처 스튜디오` : ''"></h2>
                 <button @click="closeGifModal()" class="text-gray-500 hover:text-red-500 transition">
                     <i class="ph ph-x text-2xl"></i>
                 </button>
             </div>
             
             <div id="modal_gif_container" class="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden min-h-[400px] relative shadow-inner">
-                <img x-show="!isGifLoading" id="modal_img_preview" crossorigin="anonymous" class="w-full max-h-[50vh] object-contain">
+                <div id="supergif_wrapper" class="w-full flex justify-center" x-show="isGifReady"></div>
                 
                 <div x-show="isGifLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white z-10">
                     <i class="ph ph-spinner animate-spin text-4xl mb-2"></i>
-                    <span class="font-bold mt-2">고화질 애니메이션 불러오는 중...</span>
+                    <span class="font-bold mt-2">프레임 분석 중... (최대 10초 소요)</span>
                 </div>
             </div>
 
             <div class="flex flex-col gap-4">
-                <div x-show="!modalItem?.isFrozen" class="w-full bg-orange-50 dark:bg-orange-900/30 p-4 rounded-xl border border-orange-200 dark:border-orange-800 flex flex-col gap-1 items-center shadow-sm">
-                    <p class="text-sm text-orange-600 dark:text-orange-400 font-bold flex items-center gap-1"><i class="ph-fill ph-video-camera text-lg"></i> 라이브 스냅샷 모드</p>
-                    <p class="text-xs sm:text-sm text-gray-600 dark:text-gray-300 text-center">화면이 재생되는 동안 원하는 순간에 맞춰 아래의 <b>[현재 화면 캡처]</b> 버튼을 누르세요!</p>
+                <div x-show="isGifReady && !modalItem?.isFrozen" class="w-full bg-gray-100 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex flex-col gap-2 shadow-sm">
+                    <div class="flex items-center gap-2 sm:gap-4">
+                        <button @click="stepFrame(-1)" class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition shadow" title="이전 프레임 (-1)">
+                            <i class="ph-fill ph-caret-left text-xl"></i>
+                        </button>
+                        <button @click="togglePlay()" class="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 transition shadow shrink-0">
+                            <i class="text-2xl" :class="isPlaying ? 'ph-fill ph-pause' : 'ph-fill ph-play'"></i>
+                        </button>
+                        <button @click="stepFrame(1)" class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-full hover:bg-gray-300 dark:hover:bg-gray-600 transition shadow" title="다음 프레임 (+1)">
+                            <i class="ph-fill ph-caret-right text-xl"></i>
+                        </button>
+                        
+                        <input type="range" x-model="gifCurrentFrame" min="0" :max="gifTotalFrames > 0 ? gifTotalFrames - 1 : 0" @input="scrubGif()" class="flex-1 accent-blue-600 cursor-pointer" :disabled="gifTotalFrames === 0">
+                        <span class="text-xs sm:text-sm font-bold w-12 text-right dark:text-gray-300 shrink-0" x-text="`${gifCurrentFrame}/${gifTotalFrames > 0 ? gifTotalFrames - 1 : 0}`"></span>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 text-center font-bold">바를 드래그하여 원하는 장면을 정확히 찾고 아래 버튼으로 캡처하세요.</p>
                 </div>
 
                 <div class="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border dark:border-gray-700 flex-wrap gap-2">
                     <div class="text-sm font-bold text-gray-600 dark:text-gray-300">
                         <span x-show="modalItem && modalItem.isFrozen" class="text-blue-600 dark:text-blue-400 flex items-center gap-1"><i class="ph-fill ph-check-circle text-lg"></i> 프레임 캡처 완료! (고정됨)</span>
-                        <span x-show="modalItem && !modalItem.isFrozen" class="text-orange-500 flex items-center gap-1"><i class="ph-fill ph-camera text-lg"></i> 화면 캡처 대기 중...</span>
+                        <span x-show="modalItem && !modalItem.isFrozen" class="text-orange-500 flex items-center gap-1"><i class="ph-fill ph-camera text-lg"></i> 프레임 캡처 대기 중...</span>
                     </div>
                     <div class="flex flex-wrap gap-3">
                         <button x-show="modalItem && modalItem.isFrozen" @click="downloadCurrentModalFrame()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
@@ -694,7 +708,7 @@
                             <i class="ph-fill ph-arrow-counter-clockwise"></i> 고정 풀기 (다시 캡처)
                         </button>
                         <button x-show="!isGifLoading && modalItem && !modalItem.isFrozen" @click="captureModalFrame()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base ring-2 ring-blue-300 ring-offset-1">
-                            <i class="ph-fill ph-camera"></i> 현재 화면 캡처
+                            <i class="ph-fill ph-camera"></i> 현재 프레임 캡처
                         </button>
                         <button @click="closeGifModal()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-lg font-bold flex items-center gap-2 transition shadow text-sm sm:text-base">
                             닫기
