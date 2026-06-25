@@ -374,7 +374,7 @@ document.addEventListener('alpine:init', () => {
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-            return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=1&q=80`;
+            return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=-1&q=80`;
         },
 
         compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
