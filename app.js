@@ -117,9 +117,6 @@ document.addEventListener('alpine:init', () => {
         loginAdmin() {
             if (!this.adminPassword) return;
             
-            // 입력값을 Base64로 인코딩한 뒤 문자열을 거꾸로 뒤집습니다.
-            // 0301!! 의 인코딩 후 뒤집힌 값은 'hESMwMDM' 입니다. 
-            // 이렇게 하면 소스코드에 비밀번호가 직접 노출되지 않습니다.
             const obfuscated = btoa(this.adminPassword).split('').reverse().join('');
             
             if (obfuscated === 'hESMwMDM') {
