@@ -24,6 +24,7 @@ document.addEventListener('alpine:init', () => {
         modalItem: null,
         gifInstance: null,
         gifInterval: null,
+        fallbackTimer: null,
         isGifLoading: false,
         isGifReady: false, 
         gifTotalFrames: 0,
@@ -43,7 +44,6 @@ document.addEventListener('alpine:init', () => {
         newEventTargets: '',
         newEventColor: '#F59E0B', 
         
-        // 이벤트 수정 기능 상태값 추가
         editingEventId: null,
         editEventData: { title: '', targets: '', color: '' },
 
@@ -66,13 +66,12 @@ document.addEventListener('alpine:init', () => {
         zoomIn() { if (this.zoomLevel < 5) this.zoomLevel++; },
         zoomOut() { if (this.zoomLevel > 1) this.zoomLevel--; },
         
-        // 모바일 최적화: 기본 배열(maps[3])을 모바일에서 2줄로 큼직하게 변경
         get zoomGridClass() {
             if (!this.isViewerMode) return 'grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6';
             const maps = {
                 1: 'grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-11',
                 2: 'grid-cols-3 sm:grid-cols-5 md:grid-cols-8 lg:grid-cols-10',
-                3: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8', // 모바일에서 2열 배치
+                3: 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8',
                 4: 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6',
                 5: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5'
             };
@@ -379,26 +378,13 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        getOptimizedUrl(url) {
-            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
+        // 모든 이미지가 무조건 CF 프록시를 통과하여 WebP로 압축/변환되도록 강제하는 핵심 함수
+        displayImageUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('data:') || url.startsWith('blob:')) return url;
             return 'https://image-proxy.771excel.workers.dev/?url=' + encodeURIComponent(url);
         },
 
-        async fetchImageAsBlobUrl(url) {
-            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
-            try {
-                const optimizedUrl = this.getOptimizedUrl(url);
-                let res = await fetch(optimizedUrl, { mode: 'cors', cache: 'force-cache' }).catch(() => null);
-                if (res && res.ok) {
-                    return URL.createObjectURL(await res.blob());
-                }
-                return url; 
-            } catch (e) {
-                return url;
-            }
-        },
-
-        // GIF 캡처 에러 방지를 위해 원본 GIF 포맷을 유지하는 전용 우회기
         async fetchRawGifAsBlobUrl(url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
             try {
@@ -856,29 +842,42 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
+        // GIF 캡처 모달 완전 리뉴얼 로직
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
             this.gifTotalFrames = 0; 
             this.gifCurrentFrame = 0; 
-            this.isGifLoading = true; 
             this.isPlaying = false;
             this.isGifReady = false; 
+            
             if(this.gifInterval) clearInterval(this.gifInterval);
+            if(this.fallbackTimer) clearTimeout(this.fallbackTimer);
             
             const previewImg = document.getElementById('modal_img_preview');
-            if(previewImg) previewImg.src = ''; 
+            if(previewImg) previewImg.crossOrigin = "anonymous"; 
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            
-            // WebP 프록시 우회용 raw GIF 호출 함수 사용
-            let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
-            this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
-            
-            if(previewImg) previewImg.src = safeUrl;
 
             if (item.isGif && !item.isFrozen) {
-                this.$nextTick(() => { this.initSuperGif(safeUrl); });
+                this.isGifLoading = true;
+                
+                // 10초 내에 분석 실패 시 즉시 실시간 캡처 모드로 전환
+                this.fallbackTimer = setTimeout(() => {
+                    if(this.isGifLoading) {
+                        this.isGifLoading = false; 
+                        this.isGifReady = false; 
+                        this.showToast('고용량 파일 보호를 위해 즉시 캡처 모드로 전환되었습니다.');
+                        if(this.gifInstance) this.gifInstance = null;
+                        document.getElementById('supergif_wrapper').innerHTML = '';
+                    }
+                }, 10000);
+
+                let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
+                
+                if(this.isGifLoading) { // 타임아웃 전에 로드되었다면
+                    this.$nextTick(() => { this.initSuperGif(safeUrl); });
+                }
             } else {
                 this.isGifLoading = false;
             }
@@ -893,27 +892,16 @@ document.addEventListener('alpine:init', () => {
             wrapper.innerHTML = `<img id="modal_gif_target" src="${targetUrl}" crossorigin="anonymous" rel:auto_play="0" style="display:none;" />`;
             const img = document.getElementById('modal_gif_target');
             
-            // 분석 타임아웃 제한 시간을 60초로 증가 (기존 20초)
-            const fallbackTimer = setTimeout(() => {
-                if(this.isGifLoading) {
-                    this.isGifLoading = false; 
-                    this.isGifReady = false; 
-                    this.showToast('GIF 파일 용량이 너무 커서 기본 모드로 전환됩니다.');
-                    if(this.gifInstance) this.gifInstance = null;
-                    wrapper.innerHTML = '';
-                }
-            }, 60000);
-
             try {
                 const sg = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 600 });
                 this.gifInstance = sg;
                 
                 sg.load(() => {
-                    clearTimeout(fallbackTimer); 
+                    clearTimeout(this.fallbackTimer); 
                     this.isGifLoading = false;
                     const length = sg.get_length();
                     if(length === 0) {
-                        this.showToast('GIF 프레임 분석 불가 규격입니다.');
+                        this.showToast('프레임 분석 불가 규격입니다. 실시간 캡처를 사용하세요.');
                         this.gifInstance = null; 
                         this.isGifReady = false;
                         wrapper.innerHTML = '';
@@ -931,7 +919,7 @@ document.addEventListener('alpine:init', () => {
                     }, 50);
                 });
             } catch (e) {
-                clearTimeout(fallbackTimer); 
+                clearTimeout(this.fallbackTimer); 
                 this.isGifLoading = false;
                 this.isGifReady = false;
                 wrapper.innerHTML = '';
@@ -946,6 +934,7 @@ document.addEventListener('alpine:init', () => {
             }
             this.modalItem = null;
             if(this.gifInterval) clearInterval(this.gifInterval);
+            if(this.fallbackTimer) clearTimeout(this.fallbackTimer);
             if(this.gifInstance) { this.gifInstance.pause(); this.gifInstance = null; }
             this.isGifReady = false;
             document.getElementById('supergif_wrapper').innerHTML = ''; 
@@ -986,10 +975,13 @@ document.addEventListener('alpine:init', () => {
             if (!this.modalItem) return;
             let sourceCanvas;
             
+            // 1. 프레임 분석 모드 (SuperGif 성공 시)
             if (this.isGifReady && this.gifInstance && this.gifTotalFrames > 0) {
                 this.gifInstance.pause(); this.isPlaying = false; 
                 sourceCanvas = this.gifInstance.get_canvas();
-            } else {
+            } 
+            // 2. 실시간 스냅샷 모드 (에러/시간초과로 대체되었을 시)
+            else {
                 const imgElement = document.getElementById('modal_img_preview');
                 if(!imgElement) return;
                 sourceCanvas = document.createElement('canvas'); 
@@ -1034,7 +1026,7 @@ document.addEventListener('alpine:init', () => {
                 this.modalItem.frozenDataUrl = dataUrl; 
                 this.modalItem.isFrozen = true;
                 
-                this.showToast("✅ 프레임이 가볍게 캡처 및 고정되었습니다!");
+                this.showToast("✅ 완벽하게 캡처 및 고정되었습니다!");
                 await this.saveCloudData();
             } catch (err) {
                 this.showToast("🚨 알 수 없는 오류로 캡처를 실패했습니다.");
@@ -1058,15 +1050,24 @@ document.addEventListener('alpine:init', () => {
             this.modalItem.isFrozen = false; 
             this.modalItem.frozenDataUrl = null;
             if(this.gifInterval) clearInterval(this.gifInterval);
+            if(this.fallbackTimer) clearTimeout(this.fallbackTimer);
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
-            this.modalItem._tempBlobUrl = safeUrl !== originalUrl ? safeUrl : null;
             
-            const previewImg = document.getElementById('modal_img_preview');
-            if(previewImg) previewImg.src = safeUrl;
+            this.fallbackTimer = setTimeout(() => {
+                if(this.isGifLoading) {
+                    this.isGifLoading = false; 
+                    this.isGifReady = false; 
+                    if(this.gifInstance) this.gifInstance = null;
+                    document.getElementById('supergif_wrapper').innerHTML = '';
+                }
+            }, 10000);
 
-            this.$nextTick(() => { this.initSuperGif(safeUrl); });
+            let safeUrl = await this.fetchRawGifAsBlobUrl(originalUrl);
+            
+            if(this.isGifLoading) {
+                this.$nextTick(() => { this.initSuperGif(safeUrl); });
+            }
         },
         
         downloadCurrentModalFrame() {
