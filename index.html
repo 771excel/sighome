@@ -194,13 +194,35 @@
                         </div>
                         <div class="space-y-2">
                             <template x-for="event in events" :key="event.id">
-                                <div class="flex justify-between items-center bg-white border px-3 py-2 rounded shadow-sm relative overflow-hidden">
+                                <div class="bg-white border px-3 py-2 rounded shadow-sm relative overflow-hidden group">
                                     <div class="absolute left-0 top-0 w-1.5 h-full" :style="`background-color: ${event.color || '#F59E0B'};`"></div>
-                                    <div class="flex flex-col pl-2">
-                                        <span x-text="event.title" class="text-sm font-bold"></span>
-                                        <span class="text-xs text-orange-500" x-text="`강조 번호: [ ${event.targets} ]`"></span>
-                                    </div>
-                                    <button @click="removeEvent(event.id)" class="text-red-500 hover:text-red-700"><i class="ph ph-trash"></i></button>
+                                    
+                                    <template x-if="editingEventId !== event.id">
+                                        <div class="flex justify-between items-center w-full pl-2">
+                                            <div class="flex flex-col">
+                                                <span x-text="event.title" class="text-sm font-bold"></span>
+                                                <span class="text-xs text-orange-500" x-text="`강조 번호: [ ${event.targets} ]`"></span>
+                                            </div>
+                                            <div class="flex gap-2 items-center">
+                                                <button @click="startEditEvent(event)" class="text-gray-400 hover:text-blue-500 transition"><i class="ph-fill ph-pencil-simple"></i></button>
+                                                <button @click="removeEvent(event.id)" class="text-red-400 hover:text-red-600 transition"><i class="ph-fill ph-trash"></i></button>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <template x-if="editingEventId === event.id">
+                                        <div class="flex flex-col w-full gap-2 mt-1 mb-1 pl-2">
+                                            <div class="flex gap-2 items-center">
+                                                <input type="color" x-model="editEventData.color" class="w-8 h-8 p-0 border-0 rounded cursor-pointer shrink-0">
+                                                <input type="text" x-model="editEventData.title" class="w-full border rounded px-2 py-1.5 text-sm focus:outline-blue-500 font-bold text-gray-800 bg-orange-50">
+                                            </div>
+                                            <input type="text" x-model="editEventData.targets" placeholder="강조 번호 (예: 1, 2, 3)" class="w-full border rounded px-2 py-1.5 text-sm bg-orange-50 focus:outline-blue-500">
+                                            <div class="flex justify-end gap-2 mt-1">
+                                                <button @click="cancelEditEvent()" class="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-300 font-bold">취소</button>
+                                                <button @click="saveEditEvent(event.id)" class="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 font-bold">저장</button>
+                                            </div>
+                                        </div>
+                                    </template>
                                 </div>
                             </template>
                         </div>
@@ -431,7 +453,7 @@
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                         <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]">
                                             <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
-                                            <div class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                            <div class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
                                             <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                 <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                             </div>
@@ -442,7 +464,7 @@
                                                 <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                             </span>
                                             <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, isDarkMode ? 'text-yellow-300' : 'text-yellow-700']" x-text="cleanName(item.name)"></span>
-                                            <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                            <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                         </div>
                                     </div>
                                 </template>
@@ -455,36 +477,36 @@
                     <div class="mb-10 space-y-6">
                         <template x-for="event in events" :key="event.id">
                             <div class="w-full relative avoid-break z-10" x-show="getEventItems(event.targets).length > 0">
-                                <div class="absolute -inset-1 rounded-2xl blur-md opacity-20 animate-pulse" :style="`background-color: ${event.color};`"></div>
-                                <div class="relative rounded-xl p-6 border-2 transition-colors duration-300 shadow-xl dark:bg-gray-800/95 bg-white" :style="`border-color: ${event.color}88;`">
-                                    <div class="flex items-center gap-3 mb-5 border-b pb-3 transition-colors duration-300" :style="`border-color: ${event.color}44;`">
-                                        <i class="ph-fill ph-star text-3xl" :style="`color: ${event.color};`"></i>
-                                        <h2 class="text-2xl font-black transition-colors duration-300" :style="`color: ${event.color};`">
-                                            <span x-text="event.title"></span>
-                                            <span class="text-lg font-bold ml-1 opacity-70" x-text="`(${getEventItems(event.targets).length}개)`"></span>
-                                        </h2>
+                                <div class="absolute -inset-1 rounded-2xl blur-md opacity-40 animate-pulse" :style="`background: linear-gradient(to right, ${event.color}44, ${event.color}, ${event.color}44);`"></div>
+                                <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 transition-colors duration-300" :style="`border-color: ${event.color}aa;`">
+                                    <div class="p-4 rounded-t-xl flex justify-center items-center gap-2 relative overflow-hidden" :style="`background: linear-gradient(135deg, ${event.color}ee, ${event.color}); text-shadow: 0 2px 4px rgba(0,0,0,0.3);`">
+                                        <div class="absolute inset-0 bg-white/20 opacity-30 blur-xl animate-pulse"></div>
+                                        <h2 class="text-2xl font-black text-white tracking-widest relative z-10" x-text="event.title"></h2>
+                                        <span class="text-lg font-bold text-white/90 relative z-10" x-text="`(${getEventItems(event.targets).length}개)`"></span>
                                     </div>
                                     
-                                    <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
-                                        <template x-for="item in getEventItems(event.targets)" :key="item.id">
-                                            <div class="flex flex-col items-center gap-3 w-full avoid-break">
-                                                <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group hover:border-gray-400" :style="item.isNew ? '' : `border-color: ${event.color}66;`" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : ''">
-                                                    <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
-                                                    <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
-                                                    <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                                        <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
+                                    <div class="p-4 sm:p-6 rounded-b-xl">
+                                        <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
+                                            <template x-for="item in getEventItems(event.targets)" :key="item.id">
+                                                <div class="flex flex-col items-center gap-3 w-full avoid-break">
+                                                    <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" :style="item.isNew ? '' : `border-color: ${event.color}88;`" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : ''">
+                                                        <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                                        <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
+                                                        <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
+                                                            <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex flex-col items-center w-full leading-tight px-1">
+                                                        <span class="font-black mb-0.5 flex items-center gap-1 transition-all" :style="`color: ${event.color};`" :class="zoomTextClassId">
+                                                            <span x-text="item.id"></span>
+                                                            <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
+                                                        </span>
+                                                        <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')]" x-text="cleanName(item.name)"></span>
+                                                        <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                                     </div>
                                                 </div>
-                                                <div class="flex flex-col items-center w-full leading-tight px-1">
-                                                    <span class="font-black mb-0.5 flex items-center gap-1 transition-all" :style="`color: ${event.color};`" :class="zoomTextClassId">
-                                                        <span x-text="item.id"></span>
-                                                        <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
-                                                    </span>
-                                                    <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')]" x-text="cleanName(item.name)"></span>
-                                                    <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
-                                                </div>
-                                            </div>
-                                        </template>
+                                            </template>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -507,7 +529,7 @@
                                     <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                         <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-md group hover:border-gray-400" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-600' : 'border-gray-300')">
                                             <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
-                                            <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                            <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
                                             <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                 <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                             </div>
@@ -518,7 +540,7 @@
                                                 <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                             </span>
                                             <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-200' : 'text-gray-700')]" x-text="cleanName(item.name)"></span>
-                                            <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                            <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                         </div>
                                     </div>
                                 </template>
@@ -546,7 +568,7 @@
                                         <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                             <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-blue-400/50' : 'border-blue-400')">
                                                 <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover">
-                                                <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                                <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
                                                 <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                                     <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                                 </div>
@@ -557,7 +579,7 @@
                                                     <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                                 </span>
                                                 <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-blue-100' : 'text-blue-900')]" x-text="cleanName(item.name)"></span>
-                                                <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                                <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                             </div>
                                         </div>
                                     </template>
@@ -584,7 +606,7 @@
                                 <div class="flex flex-col items-center gap-3 w-full avoid-break" x-show="!isViewerMode || !searchQuery || item.name.toLowerCase().includes(searchQuery.toLowerCase()) || item.id.toString().includes(searchQuery)">
                                     <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-colors duration-300 group" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.5)]' : (isDarkMode ? 'border-gray-500' : 'border-gray-300')">
                                         <img :src="item.imgUrl" decoding="async" loading="lazy" class="w-full h-full object-cover">
-                                        <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs font-black px-2 py-1 rounded-br-lg z-10">NEW</div>
+                                        <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
                                         <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
                                             <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                         </div>
@@ -595,7 +617,7 @@
                                             <button x-show="item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
                                         </span>
                                         <span class="font-bold text-center break-words w-full transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-gray-300' : 'text-gray-800')]" x-text="cleanName(item.name)"></span>
-                                        <audio :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                        <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
                                     </div>
                                 </div>
                             </template>
