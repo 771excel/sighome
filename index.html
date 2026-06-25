@@ -37,6 +37,7 @@
         ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
         [x-cloak] { display: none !important; }
         .sortable-ghost { opacity: 0.4; background-color: #f9fafb; }
+        #modal_gif_container canvas { max-width: 100%; max-height: 50vh; object-fit: contain; margin: 0 auto; border-radius: 0.5rem; }
     </style>
 </head>
 
@@ -118,10 +119,12 @@
                     
                     <div class="select-none">
                         <h2 class="font-bold text-lg mb-3 border-b pb-2 text-gray-800">시그니처 등록 및 연결</h2>
-                        <div class="flex gap-1 border-b border-gray-200 pb-2 mb-4">
-                            <button @click="activeAddTab = 'folder'" :class="activeAddTab === 'folder' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center">📁 폴더 업로드</button>
-                            <button @click="activeAddTab = 'individual'" :class="activeAddTab === 'individual' ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center">➕ 개별 추가</button>
-                            <button @click="activeAddTab = 'excel'" :class="activeAddTab === 'excel' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center">📊 엑셀 일괄등록</button>
+                        
+                        <div class="flex flex-wrap gap-1 border-b border-gray-200 pb-2 mb-4">
+                            <button @click="activeAddTab = 'folder'" :class="activeAddTab === 'folder' ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center whitespace-nowrap">📁 폴더 로드</button>
+                            <button @click="activeAddTab = 'thumbnail'" :class="activeAddTab === 'thumbnail' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center whitespace-nowrap">🖼️ 썸네일 로드</button>
+                            <button @click="activeAddTab = 'individual'" :class="activeAddTab === 'individual' ? 'bg-purple-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center whitespace-nowrap">➕ 개별 추가</button>
+                            <button @click="activeAddTab = 'excel'" :class="activeAddTab === 'excel' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'" class="px-3 py-2 text-xs font-bold rounded-lg transition-colors flex-1 text-center whitespace-nowrap">📊 엑셀 등록</button>
                         </div>
 
                         <div x-show="activeAddTab === 'folder'" class="bg-blue-50 p-4 rounded-xl border border-blue-100">
@@ -133,6 +136,20 @@
                                 <div class="flex flex-col items-center gap-1">
                                     <i class="ph ph-upload-simple text-2xl"></i>
                                     <span class="font-bold text-sm">폴더 선택하여 일괄 로드하기</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div x-show="activeAddTab === 'thumbnail'" class="bg-indigo-50 p-4 rounded-xl border border-indigo-100" style="display: none;">
+                            <h3 class="font-bold text-sm mb-2 flex flex-col gap-1 text-indigo-900">
+                                <span class="flex items-center gap-1"><i class="ph-fill ph-image"></i> 수동 캡처 썸네일 일괄 덮어쓰기</span>
+                                <span class="text-xs text-indigo-600 font-normal">PC에서 캡처한 이미지 파일(예: 1000_캡처.jpg)들을 선택하면 번호를 인식하여 자동으로 썸네일을 고정(초경량 압축)합니다.</span>
+                            </h3>
+                            <label class="cursor-pointer flex items-center justify-center w-full bg-white border-2 border-dashed border-indigo-400 text-indigo-600 py-4 rounded-lg hover:bg-indigo-100 transition mt-2">
+                                <input type="file" accept="image/*" multiple @change="handleManualThumbnailUpload" class="hidden">
+                                <div class="flex flex-col items-center gap-1">
+                                    <i class="ph ph-images text-2xl"></i>
+                                    <span class="font-bold text-sm">썸네일 이미지 여러 장 선택하기</span>
                                 </div>
                             </label>
                         </div>
