@@ -897,6 +897,7 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
+// GIF 스튜디오 실행 (Worker 없이 직접 애니메이션 호출)
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
@@ -910,6 +911,7 @@ document.addEventListener('alpine:init', () => {
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
+            // 🔥 메인 뷰어와 동일하게 애니메이션 WebP로 불러오기
             let animProxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=webp&n=-1&q=80`;
             
             const img = new Image();
