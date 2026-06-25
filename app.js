@@ -23,7 +23,7 @@ document.addEventListener('alpine:init', () => {
         modalOpen: false,
         modalItem: null,
         
-        // 썸네일 스튜디오 상태값
+        // 썸네일 스튜디오 상태값 복구
         gifInstance: null,
         gifInterval: null,
         isGifLoading: false,
@@ -379,16 +379,69 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
+        // 메인 뷰어 이미지 로딩 시 기본적으로 WebP 변환
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-            // n=-1 옵션을 통해 메인 보드에서는 쾌적하게 애니메이션 WebP로 렌더링
             return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=-1&q=80`;
+        },
+
+        // 404 에러 등 400프레임 초과로 인해 wsrv.nl이 뱉어낼 경우를 대비한 무조건 성공하는 대체 프록시 (index.html에서 호출됨)
+        fallbackImageUrl(url) {
+            if (!url) return '';
+            if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+            return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        },
+
+        compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
+            return new Promise(resolve => {
+                if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
+                if(dataUrl.length < 20000) return resolve(dataUrl); 
+
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if(width > maxWidth) {
+                        height = Math.round(height * (maxWidth / width));
+                        width = maxWidth;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    resolve(canvas.toDataURL('image/webp', quality));
+                };
+                img.onerror = () => resolve(dataUrl);
+                img.src = dataUrl;
+            });
         },
 
         async saveCloudData() {
             if (!this.db || !this.userId || this.isSyncing || this.isViewerMode) return;
             
+            let needsCompression = false;
+            for (let i of this.items) {
+                if ((i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) || 
+                    (i.mediaUrl && i.mediaUrl.startsWith('data:image/') && i.mediaUrl.length > 30000)) {
+                    needsCompression = true; break;
+                }
+            }
+
+            if (needsCompression) {
+                this.showToast("☁️ 데이터베이스 최적화 중... (화면이 잠시 멈출 수 있습니다)");
+                for (let i of this.items) {
+                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) {
+                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl, 0.6, 250);
+                        if (i.imgUrl && i.imgUrl.startsWith('data:image/') && i.imgUrl.length > 30000) i.imgUrl = i.frozenDataUrl;
+                    }
+                }
+            }
+
             const configDoc = doc(this.db, 'signature_boards', 'main_board_data');
             
             const itemConfigs = this.items.map(i => ({
@@ -858,8 +911,31 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        // 🔥 프레임 스크러버(프레임 바) 기능 완벽 부활 🔥
-        // 해상도를 w=400으로 줄인 GIF를 libgif에 먹여서 메모리 폭발 완벽 차단
+        // GIF 스튜디오 실행 로직 (우회 프록시 적용으로 무조건 분석 성공)
+        async fetchGifForStudio(url) {
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
+            
+            // 1. wsrv.nl 압축 버전을 먼저 시도합니다 (메모리 안정성)
+            let optimizedUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=gif&n=-1&w=400`;
+            try {
+                let res = await fetch(optimizedUrl);
+                if (res.ok) {
+                    return URL.createObjectURL(await res.blob());
+                }
+            } catch(e) {}
+            
+            // 2. 400프레임 초과 등의 이유로 실패 시, 무제한 원본 프록시로 자동 Fallback
+            let proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            try {
+                let res = await fetch(proxyUrl);
+                if (res.ok) {
+                    return URL.createObjectURL(await res.blob());
+                }
+            } catch(e) {}
+            
+            return url;
+        },
+
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
@@ -873,12 +949,12 @@ document.addEventListener('alpine:init', () => {
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
-            // 핵심: 원본 사이즈 그대로 로드하면 OOM(메모리 터짐) 발생!
-            // wsrv.nl을 통해 GIF 확장자를 유지하면서 가로 400px로 확 줄인 뼈대 GIF를 생성합니다.
-            let optimizedGifUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=gif&n=-1&w=400`;
+            // 안전하게 Blob URL로 변환하여 캔버스 보안(CORS) 에러 방지
+            let safeBlobUrl = await this.fetchGifForStudio(originalUrl);
+            this.modalItem._tempBlobUrl = safeBlobUrl;
             
             this.$nextTick(() => {
-                this.initSuperGif(optimizedGifUrl);
+                this.initSuperGif(safeBlobUrl);
             });
         },
         
@@ -890,7 +966,6 @@ document.addEventListener('alpine:init', () => {
             const img = document.getElementById('modal_gif_target');
             
             try {
-                // 해상도를 낮춘 GIF이므로 메모리 걱정 없이 쾌적하게 로드됩니다.
                 const sg = new SuperGif({ gif: img, loop_mode: true, draw_while_loading: false, max_width: 500 });
                 this.gifInstance = sg;
                 
@@ -965,7 +1040,10 @@ document.addEventListener('alpine:init', () => {
         },
         
         async captureModalFrame() {
-            if (!this.modalItem || !this.gifInstance || !this.isGifReady) return;
+            if (!this.modalItem || !this.gifInstance || !this.isGifReady) {
+                this.showToast("🚨 로딩이 완료될 때까지 잠시만 기다려주세요.");
+                return;
+            }
             
             // 현재 재생을 멈추고 해당 캔버스를 그대로 캡처합니다.
             this.gifInstance.pause(); 
@@ -974,7 +1052,7 @@ document.addEventListener('alpine:init', () => {
             const sourceCanvas = this.gifInstance.get_canvas();
 
             if (!sourceCanvas || sourceCanvas.width === 0) {
-                this.showToast("🚨 이미지를 로드하지 못했습니다.");
+                this.showToast("🚨 프레임을 추출하지 못했습니다.");
                 return;
             }
 
@@ -994,7 +1072,7 @@ document.addEventListener('alpine:init', () => {
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
             try {
-                // 정확히 멈춘 그 1프레임을 10~30KB의 초경량 WebP로 압축
+                // 정확히 멈춘 그 1프레임을 초경량 WebP로 압축
                 const dataUrl = outCanvas.toDataURL('image/webp', 0.7); 
                 
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
@@ -1037,9 +1115,13 @@ document.addEventListener('alpine:init', () => {
             document.getElementById('supergif_wrapper').innerHTML = ''; 
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            let optimizedGifUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=gif&n=-1&w=400`;
             
-            this.$nextTick(() => { this.initSuperGif(optimizedGifUrl); });
+            let safeBlobUrl = await this.fetchGifForStudio(originalUrl);
+            this.modalItem._tempBlobUrl = safeBlobUrl;
+            
+            this.$nextTick(() => {
+                this.initSuperGif(safeBlobUrl);
+            });
             await this.saveCloudData();
         },
         
