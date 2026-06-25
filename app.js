@@ -23,7 +23,7 @@ document.addEventListener('alpine:init', () => {
         modalOpen: false,
         modalItem: null,
         
-        // 썸네일 스튜디오 상태값 복구
+        // 썸네일 스튜디오 상태값
         gifInstance: null,
         gifInterval: null,
         isGifLoading: false,
@@ -379,24 +379,34 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // 메인 뷰어 이미지 로딩 시 기본적으로 WebP 변환
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+            // 뷰어 메인 화면 로딩 (애니메이션 유지 WebP)
             return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=-1&q=80`;
         },
 
-        // 404 에러 등 400프레임 초과로 인해 wsrv.nl이 뱉어낼 경우를 대비한 무조건 성공하는 대체 프록시 (index.html에서 호출됨)
-        fallbackImageUrl(url) {
-            if (!url) return '';
-            if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-            return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        // 🔥 오류(404, 429 등) 발생 시 다단계 우회 및 방어 로직 🔥
+        handleImageError(e, url) {
+            if (!url || url.startsWith('data:') || url.startsWith('blob:')) return;
+            
+            // 1차 폴백: 애니메이션(움짤)을 포기하고 첫 정지 프레임만 강제 추출 (400프레임 초과 에러 100% 회피)
+            if (!e.target.dataset.fallback) {
+                e.target.dataset.fallback = 'static';
+                e.target.src = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=1&q=80`;
+            } 
+            // 2차 폴백: 원본 서버에서 wsrv.nl 자체를 차단한 경우 무제한 우회 프록시 사용 (corsproxy.io 회피)
+            else if (e.target.dataset.fallback === 'static') {
+                e.target.dataset.fallback = 'allorigins';
+                e.target.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            }
         },
 
-        compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
+        // 데이터베이스 한도(1MB)를 지키기 위해 해상도를 모바일/썸네일용인 180px 크기로 초고도 압축
+        compressDataUrl(dataUrl, quality = 0.5, maxWidth = 180) {
             return new Promise(resolve => {
                 if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
-                if(dataUrl.length < 20000) return resolve(dataUrl); 
+                if(dataUrl.length < 8000) return resolve(dataUrl); 
 
                 const img = new Image();
                 img.onload = () => {
@@ -426,7 +436,7 @@ document.addEventListener('alpine:init', () => {
             
             let needsCompression = false;
             for (let i of this.items) {
-                if ((i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) || 
+                if ((i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 15000) || 
                     (i.mediaUrl && i.mediaUrl.startsWith('data:image/') && i.mediaUrl.length > 30000)) {
                     needsCompression = true; break;
                 }
@@ -435,9 +445,10 @@ document.addEventListener('alpine:init', () => {
             if (needsCompression) {
                 this.showToast("☁️ 데이터베이스 최적화 중... (화면이 잠시 멈출 수 있습니다)");
                 for (let i of this.items) {
-                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 30000) {
-                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl, 0.6, 250);
-                        if (i.imgUrl && i.imgUrl.startsWith('data:image/') && i.imgUrl.length > 30000) i.imgUrl = i.frozenDataUrl;
+                    // 데이터 텍스트 길이가 약 15KB 이상이면 무조건 압축 (1MB 한계 방어)
+                    if (i.isFrozen && i.frozenDataUrl && i.frozenDataUrl.length > 15000) {
+                        i.frozenDataUrl = await this.compressDataUrl(i.frozenDataUrl, 0.5, 180);
+                        if (i.imgUrl && i.imgUrl.startsWith('data:image/') && i.imgUrl.length > 15000) i.imgUrl = i.frozenDataUrl;
                     }
                 }
             }
@@ -710,7 +721,7 @@ document.addEventListener('alpine:init', () => {
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
-                    const MAX_WIDTH = 350; 
+                    const MAX_WIDTH = 180; // Firestore 1MB 제한 방어를 위한 초경량 해상도 설정
                     let width = img.width;
                     let height = img.height;
                     
@@ -724,7 +735,7 @@ document.addEventListener('alpine:init', () => {
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    resolve(canvas.toDataURL('image/webp', 0.7)); 
+                    resolve(canvas.toDataURL('image/webp', 0.5)); // 극단적 품질 조절로 2~4KB 생성
                 };
                 img.onerror = reject;
                 img.src = blobUrl;
@@ -925,7 +936,8 @@ document.addEventListener('alpine:init', () => {
             } catch(e) {}
             
             // 2. 400프레임 초과 등의 이유로 실패 시, 무제한 원본 프록시로 자동 Fallback
-            let proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            // (corsproxy.io는 429 에러가 잦아 allorigins.win으로 교체)
+            let proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
             try {
                 let res = await fetch(proxyUrl);
                 if (res.ok) {
@@ -1056,7 +1068,7 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            const MAX_W = 350; 
+            const MAX_W = 180; // 초고도 압축을 위해 해상도를 180px로 변경
             let width = sourceCanvas.width; 
             let height = sourceCanvas.height; 
             if(width > MAX_W) { 
@@ -1072,8 +1084,8 @@ document.addEventListener('alpine:init', () => {
             if (!this.modalItem.originalGifUrl) this.modalItem.originalGifUrl = this.modalItem.imgUrl;
             
             try {
-                // 정확히 멈춘 그 1프레임을 초경량 WebP로 압축
-                const dataUrl = outCanvas.toDataURL('image/webp', 0.7); 
+                // 정확히 멈춘 그 1프레임을 압축률 50%의 초경량 WebP로 압축 (2~4KB 수준)
+                const dataUrl = outCanvas.toDataURL('image/webp', 0.5); 
                 
                 const targetIdx = this.items.findIndex(i => i.id === this.modalItem.id);
                 if (targetIdx !== -1) {
