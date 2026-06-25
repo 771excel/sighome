@@ -45,8 +45,19 @@
 <body class="transition-colors duration-300" 
       :class="isViewerMode ? (isDarkMode ? 'bg-gray-100 text-gray-800' : 'bg-gray-50 text-gray-800') : (isDarkMode ? 'bg-gray-100 text-gray-800 h-screen max-h-screen flex flex-col overflow-hidden' : 'bg-gray-50 text-gray-800 h-screen max-h-screen flex flex-col overflow-hidden')" 
       x-data="signatureApp" x-cloak>
+      
+    <div x-show="!isViewerMode && !isAuthenticated" class="fixed inset-0 z-[90] flex items-center justify-center bg-gray-900 text-white" x-cloak>
+        <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl text-center w-full max-w-sm border border-gray-700">
+            <i class="ph-fill ph-lock-key text-5xl text-blue-500 mb-4"></i>
+            <h2 class="text-2xl font-bold mb-6">관리자 보드 로그인</h2>
+            <input type="password" x-model="adminPassword" @keyup.enter="loginAdmin()" placeholder="비밀번호 입력" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 mb-4 text-center text-xl focus:outline-none focus:border-blue-500 transition font-sans">
+            <button @click="loginAdmin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-lg text-lg flex items-center justify-center gap-2">
+                <i class="ph-fill ph-sign-in"></i> 접속하기
+            </button>
+        </div>
+    </div>
     
-    <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b gap-2">
+    <header class="bg-white shadow-sm h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-10 select-none border-b gap-2" x-show="isAuthenticated">
         <div class="flex items-center gap-2 sm:gap-4 overflow-hidden">
             <div class="flex items-center gap-2 shrink-0">
                 <img src="logo.png" alt="771 Logo" class="h-8 sm:h-10 object-contain" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
@@ -90,14 +101,14 @@
         </div>
     </header>
 
-    <div x-show="isViewerMode" class="bg-white px-4 py-2 border-b w-full shrink-0">
+    <div x-show="isViewerMode && isAuthenticated" class="bg-white px-4 py-2 border-b w-full shrink-0">
         <div class="relative w-full max-w-md mx-auto">
             <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
             <input type="text" x-model="searchQuery" placeholder="시그니처 검색..." class="w-full border border-gray-300 rounded-full pl-10 pr-4 py-1.5 text-sm focus:outline-blue-500 bg-gray-50 transition-all shadow-sm">
         </div>
     </div>
 
-    <main class="flex flex-1 relative" :class="isViewerMode ? 'flex-col' : 'overflow-hidden min-h-0'">
+    <main class="flex flex-1 relative" :class="isViewerMode ? 'flex-col' : 'overflow-hidden min-h-0'" x-show="isAuthenticated">
         
         <div x-show="!isViewerMode" class="fixed top-20 right-4 md:right-8 z-40 flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 border border-gray-200 dark:border-gray-700 p-2 sm:px-3 sm:py-2 rounded-full shadow-lg backdrop-blur-md transition-colors duration-300">
             <i class="ph-fill ph-speaker-high text-gray-600 dark:text-gray-300 text-lg sm:text-xl ml-1"></i>
@@ -658,7 +669,7 @@
         </div>
     </main>
 
-    <div x-show="modalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity" style="display: none;" @click="if($event.target === $el) closeGifModal()">
+    <div x-show="modalOpen" class="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-sm transition-opacity" style="display: none;" @click="if($event.target === $el) closeGifModal()">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-6 w-[800px] max-w-[90vw] flex flex-col gap-6" @click.stop>
             <div class="flex justify-between items-center border-b pb-4 dark:border-gray-700">
                 <h2 class="text-2xl font-black text-gray-800 dark:text-white" x-text="modalItem ? `[ No.${modalItem.id} ] 정밀 썸네일 캡처 스튜디오` : ''"></h2>
@@ -726,7 +737,7 @@
          x-transition:leave="transition ease-in duration-200"
          x-transition:leave-start="opacity-100 transform translate-y-0"
          x-transition:leave-end="opacity-0 transform translate-y-10"
-         class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-6 py-3 rounded-full shadow-2xl z-[100] font-bold tracking-wide flex items-center gap-3 backdrop-blur-md border border-gray-700" 
+         class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-gray-900/95 text-white px-6 py-3 rounded-full shadow-2xl z-[200] font-bold tracking-wide flex items-center gap-3 backdrop-blur-md border border-gray-700" 
          style="display: none;">
         <i class="ph-fill ph-info text-blue-400 text-xl"></i>
         <span x-text="toastMessage"></span>
