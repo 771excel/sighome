@@ -371,11 +371,14 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // 일반 보드 호출용 (정지된 가벼운 WebP 변환 반환)
+        // 🔥 핵심 변경점: Worker 우회 없이 브라우저에서 직접 wsrv.nl 공용 최적화 서버 호출
+        // &n=1 옵션을 추가하면 GIF가 완벽하게 "첫 프레임만 추출된 정지 화상"으로 변환됩니다.
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-            return 'https://image-proxy.771excel.workers.dev/?url=' + encodeURIComponent(url);
+            
+            // CORS 우회 + WebP 강제 변환 + 해상도 최적화 + GIF 첫 프레임 추출(n=1)
+            return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=1&q=80`;
         },
 
         compressDataUrl(dataUrl, quality = 0.6, maxWidth = 250) {
@@ -818,7 +821,7 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        // 완전 새로 설계된 라이브 스냅샷 스튜디오 로직
+        // GIF 스튜디오 실행 (Worker 없이 직접 애니메이션 호출)
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
@@ -832,8 +835,8 @@ document.addEventListener('alpine:init', () => {
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
-            // 프록시 서버에 anim=true를 보내서 애니메이션 WebP를 즉시 받아옵니다.
-            let animProxyUrl = `https://image-proxy.771excel.workers.dev/?anim=true&url=${encodeURIComponent(originalUrl)}`;
+            // n=-1 옵션을 주면 모든 프레임이 유지된 '애니메이션 WebP'로 실시간 재생됩니다.
+            let animProxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=webp&n=-1&q=80`;
             
             const img = new Image();
             img.crossOrigin = "anonymous";
@@ -843,7 +846,7 @@ document.addEventListener('alpine:init', () => {
             };
             img.onerror = () => {
                 this.isGifLoading = false;
-                this.showToast("🚨 애니메이션 로드에 실패했습니다. (원본 파일 삭제/손상)");
+                this.showToast("🚨 애니메이션 로드에 실패했습니다. 원본 링크를 확인해주세요.");
             };
             img.src = animProxyUrl;
         },
@@ -855,12 +858,12 @@ document.addEventListener('alpine:init', () => {
             if(previewImg) previewImg.src = '';
         },
         
+        // 현재 보이는 애니메이션 순간을 실시간 스냅샷 캡처
         async captureModalFrame() {
             if (!this.modalItem) return;
             
             const imgElement = document.getElementById('modal_img_preview');
             
-            // 이미지 태그에서 현재 눈에 보이는 애니메이션 프레임을 그대로 캔버스에 그립니다. (JS 연산 0)
             if(!imgElement || !imgElement.complete || imgElement.naturalWidth === 0) {
                 this.showToast("🚨 이미지가 덜 불러와졌습니다. 잠시만 기다려주세요.");
                 return;
@@ -902,7 +905,7 @@ document.addEventListener('alpine:init', () => {
                 this.modalItem.frozenDataUrl = dataUrl; 
                 this.modalItem.isFrozen = true;
                 
-                this.showToast("✅ 완벽하게 캡처 및 고정되었습니다!");
+                this.showToast("✅ 원하는 순간이 완벽하게 캡처 및 고정되었습니다!");
                 await this.saveCloudData();
             } catch (err) {
                 this.showToast("🚨 알 수 없는 오류로 캡처를 실패했습니다.");
@@ -926,7 +929,7 @@ document.addEventListener('alpine:init', () => {
             this.modalItem.frozenDataUrl = null;
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
-            let animProxyUrl = `https://image-proxy.771excel.workers.dev/?anim=true&url=${encodeURIComponent(originalUrl)}`;
+            let animProxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=webp&n=-1&q=80`;
             
             const previewImg = document.getElementById('modal_img_preview');
             if(previewImg) previewImg.src = '';
