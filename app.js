@@ -389,16 +389,21 @@ document.addEventListener('alpine:init', () => {
         // 🔥 오류(404, 429 등) 발생 시 다단계 우회 및 방어 로직 🔥
         handleImageError(e, url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return;
-            
-            // 1차 폴백: 애니메이션(움짤)을 포기하고 첫 정지 프레임만 강제 추출 (400프레임 초과 에러 100% 회피)
+
+            // 1차 폴백: 400프레임 초과 에러 시 wsrv.nl의 애니메이션 제한을 우회하기 위해 allorigins 프록시로 원본 로드
             if (!e.target.dataset.fallback) {
+                e.target.dataset.fallback = 'proxy';
+                e.target.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+            }
+            // 2차 폴백: allorigins 프록시도 실패할 경우(용량/시간초과), 애니메이션을 포기하고 정지 프레임(n=1)만 초경량으로 강제 추출
+            else if (e.target.dataset.fallback === 'proxy') {
                 e.target.dataset.fallback = 'static';
                 e.target.src = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=1&q=80`;
-            } 
-            // 2차 폴백: 원본 서버에서 wsrv.nl 자체를 차단한 경우 무제한 우회 프록시 사용 (corsproxy.io 회피)
+            }
+            // 3차 폴백: 최후의 수단으로 프록시 없이 원본 다이렉트 로드 시도
             else if (e.target.dataset.fallback === 'static') {
-                e.target.dataset.fallback = 'allorigins';
-                e.target.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                e.target.dataset.fallback = 'direct';
+                e.target.src = url;
             }
         },
 
@@ -922,30 +927,29 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        // GIF 스튜디오 실행 로직 (우회 프록시 적용으로 무조건 분석 성공)
+        // GIF 스튜디오 실행 로직 (우회 프록시 다중화 적용으로 400프레임 초과 완벽 방어)
         async fetchGifForStudio(url) {
             if (!url || url.startsWith('data:') || url.startsWith('blob:')) return url;
             
-            // 1. wsrv.nl 압축 버전을 먼저 시도합니다 (메모리 안정성)
-            let optimizedUrl = `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=gif&n=-1&w=400`;
-            try {
-                let res = await fetch(optimizedUrl);
-                if (res.ok) {
-                    return URL.createObjectURL(await res.blob());
+            // wsrv.nl은 400프레임 초과 시 404 에러를 반환하므로 다양한 프록시를 순차적으로 시도합니다.
+            const proxies = [
+                `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=gif&n=-1&w=400`, // 1차: 최적화 압축 (400프레임 이하)
+                `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,         // 2차: 400프레임 초과 시 무제한 원본 우회
+                `https://corsproxy.io/?${encodeURIComponent(url)}`                       // 3차: 예비 우회 프록시
+            ];
+
+            for (let proxyUrl of proxies) {
+                try {
+                    let res = await fetch(proxyUrl);
+                    if (res.ok) {
+                        return URL.createObjectURL(await res.blob());
+                    }
+                } catch(e) {
+                    // fetch 실패 시 무시하고 다음 프록시 시도
                 }
-            } catch(e) {}
+            }
             
-            // 2. 400프레임 초과 등의 이유로 실패 시, 무제한 원본 프록시로 자동 Fallback
-            // (corsproxy.io는 429 에러가 잦아 allorigins.win으로 교체)
-            let proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-            try {
-                let res = await fetch(proxyUrl);
-                if (res.ok) {
-                    return URL.createObjectURL(await res.blob());
-                }
-            } catch(e) {}
-            
-            return url;
+            return url; // 모두 실패 시 최후의 수단으로 원본 링크 반환
         },
 
         async openGifModal(item) {
