@@ -371,13 +371,9 @@ document.addEventListener('alpine:init', () => {
             });
         },
 
-        // 🔥 핵심 변경점: Worker 우회 없이 브라우저에서 직접 wsrv.nl 공용 최적화 서버 호출
-        // &n=1 옵션을 추가하면 GIF가 완벽하게 "첫 프레임만 추출된 정지 화상"으로 변환됩니다.
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-            
-            // CORS 우회 + WebP 강제 변환 + 해상도 최적화 + GIF 첫 프레임 추출(n=1)
             return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=1&q=80`;
         },
 
@@ -641,6 +637,86 @@ document.addEventListener('alpine:init', () => {
             this.showToast("✅ 폴더 파일이 안전하게 업로드 및 저장되었습니다.");
         },
 
+        // PC 캡처본(이름에 숫자가 포함된 이미지)을 드래그해서 일괄 덮어쓰기하는 기능
+        async handleManualThumbnailUpload(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            this.showToast("⏳ 썸네일 압축 및 매칭 중입니다...");
+
+            for (let file of files) {
+                const match = file.name.match(/^(\d+)/);
+                if (!match) {
+                    failCount++;
+                    continue;
+                }
+                
+                const numericId = parseInt(match[1], 10);
+                const existingItem = this.items.find(i => i.id === numericId);
+                
+                if (existingItem) {
+                    try {
+                        const blobUrl = URL.createObjectURL(file);
+                        const compressedBase64 = await this.compressDataUrlForThumbnail(blobUrl);
+                        
+                        existingItem.frozenDataUrl = compressedBase64;
+                        existingItem.imgUrl = compressedBase64;
+                        existingItem.isFrozen = true;
+                        
+                        if (!existingItem.originalGifUrl) {
+                            existingItem.originalGifUrl = existingItem.mediaUrl; 
+                        }
+                        
+                        successCount++;
+                        URL.revokeObjectURL(blobUrl); 
+                    } catch (err) {
+                        failCount++;
+                    }
+                } else {
+                    failCount++;
+                }
+            }
+
+            e.target.value = ''; 
+
+            if (successCount > 0) {
+                await this.saveCloudData();
+                this.showToast(`✅ ${successCount}개의 썸네일이 성공적으로 매칭 및 고정되었습니다! (실패/미등록: ${failCount}개)`);
+            } else {
+                this.showToast("🚨 일치하는 시그니처 번호를 찾지 못했거나 압축에 실패했습니다.");
+            }
+        },
+
+        // 수동 업로드용 초경량 썸네일 압축기 (Firebase DB 용량 초과 방지)
+        compressDataUrlForThumbnail(blobUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 350; 
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > MAX_WIDTH) {
+                        height = Math.round(height * (MAX_WIDTH / width));
+                        width = MAX_WIDTH;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    resolve(canvas.toDataURL('image/webp', 0.7)); // 10~20KB 내외의 가벼운 webp로 압축
+                };
+                img.onerror = reject;
+                img.src = blobUrl;
+            });
+        },
+
         async importExcelLinks(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -821,7 +897,6 @@ document.addEventListener('alpine:init', () => {
             return result;
         },
 
-        // GIF 스튜디오 실행 (Worker 없이 직접 애니메이션 호출)
         async openGifModal(item) {
             this.modalItem = item; 
             this.modalOpen = true; 
@@ -835,7 +910,6 @@ document.addEventListener('alpine:init', () => {
             
             let originalUrl = this.modalItem.originalGifUrl || this.modalItem.imgUrl;
             
-            // n=-1 옵션을 주면 모든 프레임이 유지된 '애니메이션 WebP'로 실시간 재생됩니다.
             let animProxyUrl = `https://wsrv.nl/?url=${encodeURIComponent(originalUrl)}&output=webp&n=-1&q=80`;
             
             const img = new Image();
@@ -858,7 +932,6 @@ document.addEventListener('alpine:init', () => {
             if(previewImg) previewImg.src = '';
         },
         
-        // 현재 보이는 애니메이션 순간을 실시간 스냅샷 캡처
         async captureModalFrame() {
             if (!this.modalItem) return;
             
