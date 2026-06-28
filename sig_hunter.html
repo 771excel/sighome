@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터 도우미 By. JIN (헌터모드 통합형)</title>
+    <title>시그헌터 도우미 By. JIN (원격 동기화 통합형)</title>
     
-    <!-- Tailwind CSS & Fonts -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -17,6 +16,11 @@
             background-color: transparent !important; font-family: 'GmarketSans', sans-serif;
             margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; user-select: none;
         }
+        
+        /* 뷰어 모드 전용 스타일 */
+        body.viewer-mode #admin-panel { display: none !important; }
+        body.viewer-mode #viewer-container { width: 100vw !important; max-width: 100vw !important; padding: 2rem !important; }
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
@@ -41,14 +45,12 @@
         .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
-        /* 카드 하단 정보바 스타일 */
         .number-bar span.sig-id { font-size: clamp(12px, calc((100vw - 500px) / var(--grid-cols) * 0.15), 26px); }
         .number-bar span.sig-name { font-size: clamp(10px, calc((100vw - 500px) / var(--grid-cols) * 0.08), 16px); }
         
         .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
         @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 30px rgba(251, 191, 36, 1); } }
 
-        /* 솔드아웃 상태 */
         .card-wrapper.is-sold-out .card-front img { filter: grayscale(100%) brightness(0.5); }
         .card-wrapper.is-sold-out .card-front .number-bar { background-color: #334155; color: #94a3b8; }
         .sold-out-stamp {
@@ -59,7 +61,6 @@
         }
         .card-wrapper.is-sold-out .sold-out-stamp { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-5deg); }
 
-        /* 헌터 획득 상태 */
         .card-wrapper.is-claimed .card-front img { filter: grayscale(0%) brightness(1); }
         .card-wrapper.is-claimed .card-front { border-color: #3b82f6 !important; box-shadow: 0 0 20px rgba(59,130,246, 0.8) !important; }
         .card-wrapper.is-claimed .sold-out-stamp { display: none !important; }
@@ -84,9 +85,8 @@
 </head>
 <body class="flex w-full h-screen relative">
 
-    <!-- [좌측] 메인 송출 화면 -->
     <div id="viewer-container" class="flex-1 relative flex flex-col justify-center gap-6 p-8 overflow-hidden">
-        <div class="flex justify-between items-start z-10 w-full max-w-[1600px] mx-auto">
+        <div class="flex justify-between items-start z-10 w-full mx-auto">
             <div id="progress-wrapper" class="glass-panel p-4 rounded-xl w-[400px] hidden shadow-xl transition-all">
                 <div class="flex justify-between items-end mb-2">
                     <span class="text-white font-bold text-lg tracking-wide">현재 단계 완판율</span>
@@ -101,12 +101,12 @@
             </div>
         </div>
 
-        <div class="flex flex-col justify-center items-center relative w-full max-w-[1600px] mx-auto z-10">
+        <div class="flex flex-col justify-center items-center relative w-full mx-auto z-10">
             <div id="card-grid" class="w-full place-content-center perspective-1000"></div>
             <div id="empty-state-msg" class="absolute inset-0 flex items-center justify-center">
                 <div class="glass-panel px-10 py-8 rounded-2xl border-4 border-dashed border-slate-500 text-center shadow-2xl">
                     <h2 class="text-3xl font-bold text-white mb-2 tracking-widest">방송 준비중</h2>
-                    <p class="text-slate-400">우측 관리자 패널에서 설정을 마치고 송출을 시작해주세요.</p>
+                    <p class="text-slate-400">관리자 패널에서 설정을 마치고 송출을 시작해주세요.</p>
                 </div>
             </div>
             <div id="stage-clear-overlay" class="absolute inset-0 flex items-center justify-center z-50">
@@ -117,7 +117,7 @@
             </div>
         </div>
 
-        <div id="banner-wrapper" class="hidden w-full max-w-[1600px] mx-auto z-10">
+        <div id="banner-wrapper" class="hidden w-full mx-auto z-10">
             <div class="bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 text-black text-center text-5xl font-black py-5 rounded-2xl shadow-[0_0_20px_rgba(250,204,21,0.5)] border-b-8 border-yellow-700">
                 <span id="banner-text">시그헌터 목록 (별풍점수 2배)</span>
             </div>
@@ -125,10 +125,8 @@
     </div>
 
 
-    <!-- [우측] 관리자 패널 -->
-    <div id="admin-panel" class="w-[500px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
+    <div id="admin-panel" class="w-[550px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
-        <!-- 공통 커스텀 모달 -->
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
             <div class="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-sm w-full shadow-2xl text-center mx-4">
                 <p id="custom-modal-msg" class="text-white mb-6 whitespace-pre-wrap leading-relaxed text-sm font-bold"></p>
@@ -136,51 +134,37 @@
             </div>
         </div>
 
-        <!-- 헌터 멤버 선택 팝업 (관리자 패널 내에 표시하여 OBS 화면 방해 X) -->
         <div id="member-select-modal" class="absolute inset-0 bg-slate-900/90 z-[150] hidden items-center justify-center backdrop-blur-sm">
             <div class="bg-slate-800 border-2 border-blue-500 rounded-xl p-6 max-w-sm w-full shadow-[0_0_30px_rgba(59,130,246,0.3)] mx-4">
                 <h3 class="text-white text-lg font-black mb-4 text-center">🎯 시그니처 획득 멤버 선택</h3>
-                <p class="text-slate-300 text-xs text-center mb-4">해당 카드를 획득한 멤버를 클릭하세요.</p>
                 <div id="member-btn-list" class="flex flex-wrap gap-2 justify-center max-h-[300px] overflow-y-auto mb-4"></div>
                 <button onclick="closeMemberModal()" class="w-full py-2 bg-slate-600 text-white rounded font-bold text-sm hover:bg-slate-500 transition">취소</button>
             </div>
         </div>
 
-        <!-- 미리보기(크게보기) & 배수설정 팝업 -->
         <div id="preview-popup" class="absolute inset-0 bg-slate-900/95 z-[100] hidden flex-col">
             <div class="p-4 border-b border-slate-700 bg-slate-800">
                 <div class="flex justify-between items-center mb-3">
                     <h3 id="popup-title" class="text-lg font-black text-yellow-400">00단계 설정</h3>
                     <button id="close-popup-btn" class="text-red-400 hover:text-white hover:bg-red-600 font-bold px-3 py-1 border border-red-500 rounded transition text-sm">닫기 ✖</button>
                 </div>
-                <!-- 팝업 내부 상단 컨트롤러 -->
                 <div class="flex flex-col gap-2">
                     <div class="flex gap-2">
                         <textarea id="popup-preview-textarea" class="admin-input flex-1 h-10 text-xs text-yellow-300 font-mono resize-none" placeholder="단가 번호를 쉼표로 입력하세요"></textarea>
-                        <button id="popup-apply-nums-btn" class="bg-emerald-600 text-white text-[11px] font-bold px-3 rounded shadow hover:bg-emerald-500">단가<br>적용</button>
-                    </div>
-                    <div class="flex gap-2">
-                        <button id="popup-random-draw-btn" class="flex-1 bg-blue-600 text-white text-[11px] font-bold py-2 rounded shadow hover:bg-blue-500">🎲 DB 랜덤 뽑기</button>
-                        <button id="popup-random-multi-btn" class="flex-1 bg-purple-600 text-white text-[11px] font-bold py-2 rounded shadow hover:bg-purple-500">🎲 배수 랜덤 부여(1~5)</button>
+                        <button id="popup-apply-nums-btn" class="bg-emerald-600 text-white text-[11px] font-bold px-3 rounded shadow hover:bg-emerald-500">단가 적용</button>
                     </div>
                 </div>
             </div>
             <div id="popup-content" class="flex-1 p-4 overflow-y-auto grid grid-cols-3 gap-3 content-start"></div>
         </div>
 
-        <div class="bg-red-600 text-white text-center text-sm font-black py-1.5 tracking-wide flex items-center justify-center gap-2 shadow-md z-10 shrink-0">
-            ⚠️ OBS에서 <span class="text-yellow-300 px-1">`Alt + 드래그`</span>로 이 패널을 잘라주세요
-        </div>
-
         <div class="p-4 bg-slate-950 flex justify-between items-center border-b border-slate-800 shrink-0">
             <h2 class="text-lg font-black text-white">⚙️ 시그헌터 관리자</h2>
             <div class="flex gap-2">
-                <button id="btn-copy-link" class="bg-green-600 hover:bg-green-500 text-white text-[11px] font-bold px-2 py-1.5 rounded shadow transition">🔗 링크복사</button>
-                <button id="btn-capture" class="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-2 py-1.5 rounded shadow transition">📸 캡처</button>
+                <button id="btn-copy-link" class="bg-green-600 hover:bg-green-500 text-white text-[11px] font-bold px-2 py-1.5 rounded shadow transition">🔗 OBS 브라우저 소스 링크복사</button>
             </div>
         </div>
 
-        <!-- ⏱️ 실시간 타이머 -->
         <div class="p-4 bg-slate-900 border-b border-slate-700 shadow-xl z-20 shrink-0 relative">
             <div class="bg-slate-800 p-3 rounded-xl border border-slate-600 flex items-center justify-between shadow-inner">
                 <label class="block text-xs font-black text-emerald-400">⏱️ 타이머 조작</label>
@@ -198,13 +182,13 @@
 
         <div class="flex-1 p-4 overflow-y-auto space-y-4 custom-scroll relative z-10">
             
-            <!-- DB 연동 & 시스템 관리 -->
             <div class="bg-slate-800 p-4 rounded-xl border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
                 <div class="flex justify-between items-center mb-2">
-                    <label class="block text-sm font-bold text-blue-400">☁️ Firebase DB / 시스템</label>
+                    <label class="block text-sm font-bold text-blue-400">☁️ Firebase 원격 연동 상태</label>
                     <span id="db-status-badge" class="px-2 py-1 text-[10px] font-bold rounded-full bg-slate-700 text-slate-300">연결 대기중...</span>
                 </div>
-                <div class="grid grid-cols-2 gap-2 mt-3">
+                <p class="text-[10px] text-slate-400 mb-2">OBS 소스에 링크를 넣으면 여기서 제어하는 화면이 실시간 반영됩니다.</p>
+                <div class="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-slate-700">
                     <button id="new-game-btn" class="bg-red-900 hover:bg-red-800 text-red-100 font-bold py-2 rounded text-[11px] shadow border border-red-700">🔄 기록 초기화</button>
                     <button id="auto-generate-btn" class="bg-indigo-900 hover:bg-indigo-800 text-indigo-100 font-bold py-2 rounded text-[11px] shadow border border-indigo-700">✨ 1~16단계 리셋</button>
                 </div>
@@ -220,7 +204,6 @@
                 </div>
             </div>
 
-            <!-- 🎯 랜덤 시그헌터 모드 & 멤버 관리 -->
             <div class="bg-slate-800 p-4 rounded-xl border-2 border-purple-500/50 relative overflow-hidden">
                 <div class="absolute inset-0 bg-purple-900/10 pointer-events-none"></div>
                 <div class="flex justify-between items-center mb-3 relative z-10 border-b border-slate-700 pb-2">
@@ -230,8 +213,6 @@
                         <input type="checkbox" id="toggle-hunter-mode" class="w-4 h-4 accent-purple-500">
                     </label>
                 </div>
-                <p class="text-[10px] text-slate-400 mb-3 leading-tight relative z-10">활성화 시: 1클릭(솔드아웃) 👉 2클릭(멤버 선택 및 배수 표시) 👉 3클릭(초기화)</p>
-                
                 <div class="relative z-10 bg-slate-900 p-2 rounded border border-slate-700">
                     <label class="block text-xs font-bold text-slate-300 mb-2">👥 멤버 관리</label>
                     <div class="flex gap-2 mb-2">
@@ -242,7 +223,6 @@
                 </div>
             </div>
 
-            <!-- UI 세팅 -->
             <div class="bg-slate-800 p-3 rounded-xl border border-slate-700">
                 <label class="block text-xs font-bold text-amber-400 mb-3">🎨 화면 배열 및 배너 설정</label>
                 <div class="flex items-center gap-4 mb-1">
@@ -258,7 +238,6 @@
                 </div>
             </div>
 
-            <!-- Undo 영역 -->
             <div class="bg-slate-800 p-4 rounded-xl border border-red-900/50 shadow-sm">
                 <div class="flex justify-between items-center mb-2">
                     <label class="block text-sm font-bold text-red-400">↩️ 솔드아웃/획득 복구</label>
@@ -269,25 +248,33 @@
                 </div>
             </div>
 
-            <!-- 단계 매니저 -->
             <div>
                 <div class="flex justify-between items-center mb-3 mt-4">
                     <label class="block text-sm font-bold text-indigo-300">🎲 단계별 설정 및 송출</label>
                     <button id="btn-add-stage" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded shadow">➕ 단계 추가</button>
                 </div>
+                
+                <div class="bg-slate-800 p-3 rounded-lg border border-purple-500/50 mb-3 shadow-md">
+                    <label class="block text-xs font-bold text-purple-400 mb-2">✨ 전체 단계 배수 일괄 설정 (수동 지정)</label>
+                    <div class="flex gap-2">
+                        <input type="number" id="global-multi-input" class="admin-input flex-1 text-xs" placeholder="적용할 배수 숫자 입력 (예: 2)" min="1">
+                        <button id="btn-global-multi" class="bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold px-4 py-1.5 rounded shadow">모든 번호에 일괄 적용</button>
+                    </div>
+                </div>
+
                 <button id="batch-generate-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 mb-4 rounded-xl shadow border border-blue-400 text-sm">
                     🎲 전체 단계 일괄 랜덤 생성 (중복 방지)
                 </button>
-                <div id="stages-container" class="space-y-3 pb-20"></div>
+                
+                <div id="stages-container" class="space-y-4 pb-20"></div>
             </div>
         </div>
     </div>
 
-    <!-- Firebase SDKs (기존 로직 유지) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o", authDomain: "excel-ec5e4.firebaseapp.com",
@@ -298,21 +285,62 @@
         const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
+        
+        // 원격 동기화용 레퍼런스
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v4');
+        window.syncToCloud = async (stateObj) => {
+            if(!window.isViewerMode && window.isFirebaseReady) {
+                try { await setDoc(window.stateDocRef, stateObj, {merge: true}); } catch(e) { console.error(e); }
+            }
+        };
 
         signInAnonymously(auth).then(() => {
+            // 원본 시그니처 데이터 로드
             onSnapshot(doc(db, 'signature_boards', 'main_board_data'), (snapshot) => {
                 if (snapshot.exists() && snapshot.data().itemConfigs) {
                     window.firebaseItems = snapshot.data().itemConfigs; window.isFirebaseReady = true;
                     document.getElementById('db-status-badge').className = "px-2 py-1 text-[10px] font-bold rounded-full bg-blue-600 text-white animate-pulse";
                     document.getElementById('db-status-badge').innerText = "🟢 DB 실시간 연동중";
-                    if(window.state && window.state.currentBroadcastStageId) window.executeBroadcast(window.state.currentBroadcastStageId, true);
+                    
+                    if(!window.isViewerMode && window.state && window.state.currentBroadcastStageId) {
+                        window.executeBroadcast(window.state.currentBroadcastStageId, true);
+                    }
                 }
             });
+
+            // 뷰어 모드일 때만 Firestore 상태 감지하여 렌더링 업데이트
+            if (window.isViewerMode) {
+                onSnapshot(window.stateDocRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const cloudState = docSnap.data();
+                        const prevStage = window.state.currentBroadcastStageId;
+                        window.state = { ...window.state, ...cloudState };
+                        
+                        updateViewerLayout();
+                        if (window.state.currentBroadcastStageId && window.state.currentBroadcastStageId !== prevStage) {
+                            window.executeBroadcast(window.state.currentBroadcastStageId, true);
+                        } else if (window.state.currentBroadcastStageId) {
+                            window.updateViewerStateOnly();
+                        } else {
+                            // 초기화 된 경우
+                            document.getElementById('empty-state-msg').style.display = 'flex';
+                            document.getElementById('card-grid').innerHTML = '';
+                            document.getElementById('banner-wrapper').classList.add('hidden');
+                            document.getElementById('progress-wrapper').classList.add('hidden');
+                            document.getElementById('viewer-timer-box').classList.add('hidden');
+                        }
+                    }
+                });
+            }
         }).catch(e => console.error(e));
     </script>
 
-    <!-- Core Logic -->
     <script>
+        // 뷰어 모드 감지 (OBS 소스용)
+        const urlParams = new URLSearchParams(window.location.search);
+        window.isViewerMode = urlParams.get('viewer') === 'true';
+        if (window.isViewerMode) document.body.classList.add('viewer-mode');
+
         function showModal(msg, isConfirm = false, onConfirm = null) {
             const m = document.getElementById('custom-modal'); const b = document.getElementById('custom-modal-btns');
             document.getElementById('custom-modal-msg').innerText = msg; b.innerHTML = '';
@@ -326,21 +354,20 @@
             m.classList.replace('hidden', 'flex');
         }
 
-        // 16단계 복구
+        // 16단계 기본값 설정
         const PRESET_STAGES = Array.from({length: 16}, (_, i) => ({
             id: `st_${i+1}`, name: `${String(i+1).padStart(2,'0')}단계`, 
             min: i===15? 20000 : (i*1000 + 1000), max: i===15? 300000 : (i*1000 + 1999), 
             count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: []
         }));
-        PRESET_STAGES[9].mandatory = "5000,10000"; PRESET_STAGES[15].mandatory = "40000,50000,77771,100000"; // 예시
+        PRESET_STAGES[9].mandatory = "5000,10000"; PRESET_STAGES[15].mandatory = "40000,50000,77771,100000";
 
         window.state = {
             cols: 5, rows: 2, bannerText: "시그헌터 목록 (별풍점수 2배)",
             timer: { remaining: 600, isRunning: false, targetEnd: null },
             globalSoldOutList: [], currentBroadcastStageId: null,
             stages: JSON.parse(JSON.stringify(PRESET_STAGES)),
-            // 헌터 모드 상태
-            isHunterMode: false, members: [], multipliers: {}, claimedCards: {} // num -> memberName
+            isHunterMode: false, members: [], multipliers: {}, claimedCards: {} 
         };
 
         const DOM = {
@@ -356,14 +383,21 @@
         };
 
         window.addEventListener('DOMContentLoaded', () => {
-            const saved = localStorage.getItem('sigHunterState_v3');
-            if(saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
-            DOM.inCols.value = state.cols; DOM.inRows.value = state.rows; DOM.inBanner.value = state.bannerText;
-            DOM.toggleHunter.checked = state.isHunterMode;
-            updateViewerLayout(); renderAdminStages(); renderMembers();
+            if (!window.isViewerMode) {
+                const saved = localStorage.getItem('sigHunterState_v4');
+                if(saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
+                DOM.inCols.value = state.cols; DOM.inRows.value = state.rows; DOM.inBanner.value = state.bannerText;
+                DOM.toggleHunter.checked = state.isHunterMode;
+                updateViewerLayout(); renderAdminStages(); renderMembers();
+            }
         });
 
-        function saveState() { localStorage.setItem('sigHunterState_v3', JSON.stringify(state)); }
+        // 상태 저장 및 Cloud 동기화 트리거
+        function saveState() {
+            if (window.isViewerMode) return; // 뷰어는 쓰기 금지
+            localStorage.setItem('sigHunterState_v4', JSON.stringify(state));
+            if(window.syncToCloud) window.syncToCloud(state);
+        }
 
         // 옵션 바인딩
         DOM.inCols.addEventListener('change', e => { state.cols = e.target.value; updateViewerLayout(); saveState(); });
@@ -371,12 +405,12 @@
         DOM.inBanner.addEventListener('input', e => { state.bannerText = e.target.value; DOM.bannerText.innerText = e.target.value; saveState(); });
         DOM.toggleHunter.addEventListener('change', e => { state.isHunterMode = e.target.checked; saveState(); });
         
-        function updateViewerLayout() { document.documentElement.style.setProperty('--grid-cols', state.cols); document.documentElement.style.setProperty('--grid-rows', state.rows); }
+        window.updateViewerLayout = function() { document.documentElement.style.setProperty('--grid-cols', state.cols); document.documentElement.style.setProperty('--grid-rows', state.rows); }
 
-        // OBS 링크 복사
+        // 링크 복사
         document.getElementById('btn-copy-link').addEventListener('click', () => {
             const url = window.location.href.split('?')[0] + "?viewer=true";
-            navigator.clipboard.writeText(url).then(() => showModal("OBS 브라우저 소스용 링크가 복사되었습니다!\n\n" + url));
+            navigator.clipboard.writeText(url).then(() => showModal("OBS 브라우저 소스용 링크가 복사되었습니다!\nOBS 소스 추가 후 너비/높이를 맞추고 사용하세요.\n\n" + url));
         });
 
         // 헌터 멤버 관리
@@ -393,7 +427,7 @@
         }
         window.removeMember = (m) => { state.members = state.members.filter(x => x !== m); saveState(); renderMembers(); };
 
-        // 시스템 복구 버튼들
+        // 시스템 버튼들
         document.getElementById('new-game-btn').addEventListener('click', () => {
             showModal("모든 판매/획득 기록 및 화면이 초기화됩니다.", true, () => {
                 state.globalSoldOutList = []; state.claimedCards = {}; state.currentBroadcastStageId = null;
@@ -406,8 +440,7 @@
             showModal("1~16단계 설정값을 기본값으로 리셋합니다.", true, () => { state.stages = JSON.parse(JSON.stringify(PRESET_STAGES)); saveState(); renderAdminStages(); });
         });
         document.getElementById('check-dup-btn').addEventListener('click', () => {
-            const locs = {};
-            state.stages.forEach(s => s.previewNumbers.forEach(n => { if(!locs[n]) locs[n]=[]; locs[n].push(s.name); }));
+            const locs = {}; state.stages.forEach(s => s.previewNumbers.forEach(n => { if(!locs[n]) locs[n]=[]; locs[n].push(s.name); }));
             const dups = Object.entries(locs).filter(([_, l]) => l.length > 1);
             if(dups.length>0) showModal("⚠️ 중복 발견!\n" + dups.map(([n, l]) => `[${n}] : ${l.join(', ')}`).join('\n'));
             else showModal("✅ 대기목록 내 중복 번호가 없습니다.");
@@ -425,6 +458,16 @@
             r.onload = ev => { try { state = {...state, ...JSON.parse(ev.target.result)}; saveState(); location.reload(); } catch(err) { showModal("올바른 JSON 파일이 아닙니다."); } }; r.readAsText(f);
         });
 
+        // 전체 배수 일괄 적용
+        document.getElementById('btn-global-multi').addEventListener('click', () => {
+            const val = parseInt(document.getElementById('global-multi-input').value);
+            if(!val || val < 1) return showModal("올바른 배수 숫자를 입력하세요.");
+            showModal(`모든 단계의 대기목록에 일괄 ${val}배를 적용하시겠습니까?`, true, () => {
+                state.stages.forEach(s => s.previewNumbers.forEach(n => state.multipliers[n] = val));
+                saveState(); showModal("전체 적용이 완료되었습니다.");
+            });
+        });
+
         // 단계 렌더링
         function renderAdminStages() {
             DOM.stageContainer.innerHTML = '';
@@ -432,6 +475,11 @@
                 const isBroadcasting = state.currentBroadcastStageId === stage.id;
                 const div = document.createElement('div');
                 div.className = `bg-slate-800 p-3 rounded-lg border ${isBroadcasting ? 'border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'border-slate-700'} relative transition-all`;
+                
+                const previewTags = stage.previewNumbers.length > 0 
+                    ? stage.previewNumbers.map(n => `<span class="px-1.5 py-0.5 bg-slate-700 border border-slate-600 rounded text-yellow-300 font-bold leading-none">${n}</span>`).join('') 
+                    : '<span class="text-slate-500 font-bold px-1 py-0.5">없음</span>';
+
                 div.innerHTML = `
                     <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 cursor-move handle">
                         <div class="flex items-center gap-2 w-full">
@@ -448,11 +496,24 @@
                         <div class="flex flex-col"><span class="text-[9px] text-emerald-400">분</span><input type="number" class="admin-input px-0" value="${stage.timerMin}" data-action="update-tmin" data-id="${stage.id}"></div>
                         <div class="flex flex-col"><span class="text-[9px] text-emerald-400">초</span><input type="number" class="admin-input px-0" value="${stage.timerSec}" data-action="update-tsec" data-id="${stage.id}"></div>
                     </div>
-                    <div class="flex gap-2 mb-2">
-                        <input type="text" class="admin-input flex-1 text-left px-2 text-xs" value="${stage.mandatory}" data-action="update-mand" data-id="${stage.id}" placeholder="필수번호(쉼표구분)">
-                        <button class="bg-indigo-600 text-white text-[10px] font-bold px-3 rounded shadow hover:bg-indigo-500" data-action="open-preview" data-id="${stage.id}">🔍 설정/크게보기</button>
+                    
+                    <div class="bg-slate-900 p-2 rounded border border-slate-700 mb-2">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] text-slate-400">현재 대기목록 확인 (단가 갯수: ${stage.previewNumbers.length})</span>
+                            <button class="bg-indigo-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow hover:bg-indigo-500" data-action="open-preview" data-id="${stage.id}">🔍 크게보기/설정</button>
+                        </div>
+                        <div class="flex flex-wrap gap-1 mt-1 text-[10px] min-h-[24px]">
+                            ${previewTags}
+                        </div>
                     </div>
-                    <button class="w-full bg-red-600 hover:bg-red-500 text-white text-xs font-black py-2 rounded shadow transition flex justify-center gap-1 border border-red-500" data-action="broadcast" data-id="${stage.id}">▶ 송출 시작</button>
+
+                    <div class="flex gap-2 mb-2 items-center">
+                        <input type="number" class="admin-input w-16 text-xs" id="stage-multi-${stage.id}" placeholder="배수" value="1" min="1">
+                        <button class="bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold px-2 py-1.5 rounded shadow whitespace-nowrap" data-action="apply-stage-multi" data-id="${stage.id}">단계 전체 배수적용</button>
+                        <button class="ml-auto bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold py-1.5 px-3 rounded shadow" data-action="draw-random" data-id="${stage.id}">🎲 뽑기</button>
+                    </div>
+
+                    <button class="w-full bg-red-600 hover:bg-red-500 text-white text-xs font-black py-2 rounded shadow transition flex justify-center gap-1 border border-red-500" data-action="broadcast" data-id="${stage.id}">▶ 화면 송출 시작</button>
                 `;
                 DOM.stageContainer.appendChild(div);
             });
@@ -472,6 +533,14 @@
             const id = e.target.dataset.id; const action = e.target.dataset.action; if(!id) return;
             if(action === 'open-preview') openPreviewPopup(id);
             if(action === 'broadcast') window.executeBroadcast(id);
+            if(action === 'draw-random') executeStageRandom(id);
+            if(action === 'apply-stage-multi') {
+                const val = parseInt(document.getElementById(`stage-multi-${id}`).value);
+                if(!val || val < 1) return showModal("올바른 배수를 입력하세요.");
+                const stage = state.stages.find(s => s.id === id);
+                stage.previewNumbers.forEach(n => state.multipliers[n] = val);
+                saveState(); showModal(`${stage.name}의 모든 번호에 ${val}배가 적용되었습니다.`);
+            }
         });
 
         function executeStageRandom(id) {
@@ -519,13 +588,13 @@
                 
                 content.innerHTML += `
                     <div class="bg-slate-800 p-2 rounded border border-slate-600 flex flex-col items-center">
-                        <div class="w-full h-16 mb-1 bg-slate-900 rounded overflow-hidden flex items-center justify-center">
+                        <div class="w-full h-20 mb-2 bg-slate-900 rounded overflow-hidden flex items-center justify-center">
                             ${imgSrc ? `<img src="${imgSrc}" class="max-h-full object-contain">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
                         </div>
-                        <span class="text-yellow-400 font-black text-sm mb-1">${num}</span>
-                        <div class="flex items-center gap-1 w-full bg-slate-900 p-1 rounded">
-                            <span class="text-[10px] text-slate-400">배수</span>
-                            <input type="number" class="admin-input w-full text-xs py-0.5 px-1" value="${multi}" onchange="updateMultiplier(${num}, this.value)">
+                        <span class="text-yellow-400 font-black text-sm mb-2">${num}</span>
+                        <div class="flex items-center justify-between w-full bg-slate-900 p-1.5 rounded">
+                            <span class="text-xs text-slate-400 font-bold pl-1">배수</span>
+                            <input type="number" class="admin-input w-12 text-xs py-1" value="${multi}" min="1" onchange="updateMultiplier(${num}, this.value)">
                         </div>
                     </div>`;
             });
@@ -538,25 +607,19 @@
             let nums = document.getElementById('popup-preview-textarea').value.split(',').map(n=>parseInt(n.trim())).filter(n=>!isNaN(n));
             stage.previewNumbers = [...new Set(nums)].sort((a,b)=>a-b);
             stage.previewNumbers.forEach(n => { if(!state.multipliers[n]) state.multipliers[n]=1; });
-            saveState(); renderPreviewCards();
-        });
-        document.getElementById('popup-random-draw-btn').addEventListener('click', () => { executeStageRandom(currentPreviewStageId); renderPreviewCards(); });
-        document.getElementById('popup-random-multi-btn').addEventListener('click', () => {
-            const stage = state.stages.find(s => s.id === currentPreviewStageId); if(!stage) return;
-            stage.previewNumbers.forEach(n => { state.multipliers[n] = Math.floor(Math.random() * 5) + 1; }); // 1~5배
-            saveState(); renderPreviewCards();
+            saveState(); renderPreviewCards(); renderAdminStages();
         });
 
 
-        // 메인 뷰어 송출 로직
+        // 메인 뷰어 송출 로직 (전체 렌더링)
         window.executeBroadcast = function(id, isRestore = false) {
             if (!window.isFirebaseReady) return; const stage = state.stages.find(s => s.id === id);
-            if(stage.previewNumbers.length === 0 && !isRestore) return showModal("대기목록이 비어있습니다. 설정/크게보기에서 단가를 입력하세요.");
+            if(stage.previewNumbers.length === 0 && !isRestore && !window.isViewerMode) return showModal("대기목록이 비어있습니다. 설정/크게보기에서 단가를 입력하세요.");
             if(!isRestore) { stage.broadcastNumbers = [...stage.previewNumbers]; state.currentBroadcastStageId = id; saveState(); }
 
             DOM.emptyMsg.style.display = 'none'; DOM.bannerWrap.classList.remove('hidden'); DOM.progWrap.classList.remove('hidden'); DOM.timerBox.classList.remove('hidden');
             DOM.bannerText.innerText = `${stage.name} ${state.bannerText}`; DOM.clearOverlay.classList.remove('show');
-            DOM.viewerGrid.innerHTML = ''; updateViewerLayout();
+            DOM.viewerGrid.innerHTML = ''; window.updateViewerLayout();
 
             stage.broadcastNumbers.forEach((num, i) => {
                 const fbItem = window.firebaseItems.find(item => item.id === num);
@@ -570,7 +633,9 @@
 
                 const wrapper = document.createElement('div');
                 wrapper.className = `card-wrapper cursor-pointer w-full aspect-[3/4] relative ${isVIP ? 'vip-glow' : ''} ${isSoldOut ? 'is-sold-out' : ''} ${isClaimed ? 'is-claimed' : ''}`;
-                wrapper.dataset.number = num; wrapper.onclick = () => handleCardClick(num, wrapper);
+                wrapper.dataset.number = num; 
+                // 뷰어 모드가 아닐 때만 클릭 제어 허용
+                if(!window.isViewerMode) wrapper.onclick = () => handleCardClick(num, wrapper);
 
                 wrapper.innerHTML = `
                     <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
@@ -599,36 +664,54 @@
                 clearInterval(timerInterval);
                 const tMin = stage.timerMin || 10; const tSec = stage.timerSec || 0;
                 state.timer.remaining = tMin * 60 + tSec; state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true;
-                DOM.timerBoxMin.value = tMin; DOM.timerBoxSec.value = tSec; updateTimerBtnUI();
+                if(!window.isViewerMode) { DOM.timerBoxMin.value = tMin; DOM.timerBoxSec.value = tSec; updateTimerBtnUI(); }
                 timerInterval = setInterval(tickTimer, 200); renderTimerText();
             }
-            renderAdminStages(); updateProgressAndUndoUI();
+            if(!window.isViewerMode) renderAdminStages(); 
+            updateProgressAndUndoUI();
+        }
+
+        // 뷰어 모드 부분 렌더링 (깜빡임 방지용)
+        window.updateViewerStateOnly = function() {
+            if(!state.currentBroadcastStageId) return;
+            const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
+            if(!stage) return;
+            
+            stage.broadcastNumbers.forEach(num => {
+                const wrapper = document.querySelector(`.card-wrapper[data-number="${num}"]`);
+                if(wrapper) {
+                    const isSoldOut = state.globalSoldOutList.includes(num);
+                    const isClaimed = !!state.claimedCards[num];
+                    const multi = state.multipliers[num] || 1;
+
+                    if (isSoldOut && !isClaimed) { wrapper.classList.add('is-sold-out'); wrapper.classList.remove('is-claimed'); } 
+                    else if (isClaimed) {
+                        wrapper.classList.add('is-claimed'); wrapper.classList.remove('is-sold-out');
+                        const badge = wrapper.querySelector('.claimed-badge'); if(badge) badge.innerText = state.claimedCards[num];
+                    } 
+                    else { wrapper.classList.remove('is-sold-out', 'is-claimed'); }
+
+                    const multiStamp = wrapper.querySelector('.multiplier-stamp');
+                    if(multiStamp) multiStamp.innerText = `x${multi}`;
+                }
+            });
+            updateProgressAndUndoUI();
         }
 
         // 헌터 모드 클릭 제어
-        let pendingClaimNum = null;
-        let pendingClaimWrapper = null;
-        
+        let pendingClaimNum = null; let pendingClaimWrapper = null;
         function handleCardClick(num, wrapperElement) {
-            const isSold = state.globalSoldOutList.includes(num);
-            const isClaimed = !!state.claimedCards[num];
-
-            if (!isSold) {
-                // 1. 아직 솔드아웃 안됨 -> 솔드아웃 처리
-                state.globalSoldOutList.push(num);
-                wrapperElement.classList.add('is-sold-out');
-            } else if (state.isHunterMode && !isClaimed) {
-                // 2. 솔드아웃 & 헌터모드 켜짐 & 획득전 -> 멤버 팝업 띄우기
+            const isSold = state.globalSoldOutList.includes(num); const isClaimed = !!state.claimedCards[num];
+            if (!isSold) { state.globalSoldOutList.push(num); wrapperElement.classList.add('is-sold-out'); } 
+            else if (state.isHunterMode && !isClaimed) {
                 pendingClaimNum = num; pendingClaimWrapper = wrapperElement;
                 document.getElementById('member-btn-list').innerHTML = state.members.map(m => 
                     `<button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded shadow transition" onclick="assignMember('${m}')">${m}</button>`
                 ).join('');
                 document.getElementById('member-select-modal').classList.replace('hidden', 'flex');
             } else {
-                // 3. 획득된 상태이거나 헌터모드 꺼져있으면 -> 초기 상태로 복구
                 state.globalSoldOutList = state.globalSoldOutList.filter(n => n !== num);
-                delete state.claimedCards[num];
-                wrapperElement.classList.remove('is-sold-out', 'is-claimed');
+                delete state.claimedCards[num]; wrapperElement.classList.remove('is-sold-out', 'is-claimed');
             }
             saveState(); updateProgressAndUndoUI();
         }
@@ -640,10 +723,7 @@
             pendingClaimWrapper.classList.add('is-claimed');
             closeMemberModal(); saveState(); updateProgressAndUndoUI();
         }
-        window.closeMemberModal = function() {
-            document.getElementById('member-select-modal').classList.replace('flex', 'hidden');
-            pendingClaimNum = null; pendingClaimWrapper = null;
-        }
+        window.closeMemberModal = function() { document.getElementById('member-select-modal').classList.replace('flex', 'hidden'); pendingClaimNum = null; pendingClaimWrapper = null; }
 
         function updateProgressAndUndoUI() {
             if(!state.currentBroadcastStageId) return; const stage = state.stages.find(s => s.id === state.currentBroadcastStageId); if(!stage) return;
@@ -654,16 +734,18 @@
             if(percent >= 80 && percent < 100) DOM.progWrap.classList.add('warning-active'); else DOM.progWrap.classList.remove('warning-active');
             if(percent === 100 && total > 0) DOM.clearOverlay.classList.add('show'); else DOM.clearOverlay.classList.remove('show');
 
-            DOM.undoCount.innerText = `${soldCount}개 기록됨`; DOM.undoList.innerHTML = '';
-            if(soldCount === 0) DOM.undoList.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">판매 기록이 없습니다.</div>';
-            else currentSoldOuts.forEach(num => {
-                const claimTxt = state.claimedCards[num] ? `<span class="text-blue-400">(${state.claimedCards[num]})</span>` : '';
-                const btn = document.createElement('button');
-                btn.className = "bg-slate-800 hover:bg-red-800 border border-slate-600 text-white text-[11px] px-2 py-1 rounded flex items-center gap-1 transition group";
-                btn.innerHTML = `<span class="text-red-400 group-hover:text-white">↺ 복구</span> <span class="font-bold ml-1">${num}</span> ${claimTxt}`;
-                btn.onclick = () => { const tw = document.querySelector(`.card-wrapper[data-number="${num}"]`); if(tw) { state.globalSoldOutList = state.globalSoldOutList.filter(n=>n!==num); delete state.claimedCards[num]; tw.classList.remove('is-sold-out', 'is-claimed'); saveState(); updateProgressAndUndoUI(); } };
-                DOM.undoList.appendChild(btn);
-            });
+            if(!window.isViewerMode) {
+                DOM.undoCount.innerText = `${soldCount}개 기록됨`; DOM.undoList.innerHTML = '';
+                if(soldCount === 0) DOM.undoList.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">판매 기록이 없습니다.</div>';
+                else currentSoldOuts.forEach(num => {
+                    const claimTxt = state.claimedCards[num] ? `<span class="text-blue-400">(${state.claimedCards[num]})</span>` : '';
+                    const btn = document.createElement('button');
+                    btn.className = "bg-slate-800 hover:bg-red-800 border border-slate-600 text-white text-[11px] px-2 py-1 rounded flex items-center gap-1 transition group";
+                    btn.innerHTML = `<span class="text-red-400 group-hover:text-white">↺ 복구</span> <span class="font-bold ml-1">${num}</span> ${claimTxt}`;
+                    btn.onclick = () => { const tw = document.querySelector(`.card-wrapper[data-number="${num}"]`); if(tw) { state.globalSoldOutList = state.globalSoldOutList.filter(n=>n!==num); delete state.claimedCards[num]; tw.classList.remove('is-sold-out', 'is-claimed'); saveState(); updateProgressAndUndoUI(); } };
+                    DOM.undoList.appendChild(btn);
+                });
+            }
         }
 
         let timerInterval = null;
@@ -675,7 +757,7 @@
         function tickTimer() {
             if(!state.timer.isRunning) return;
             state.timer.remaining = Math.max(0, Math.ceil((state.timer.targetEnd - Date.now()) / 1000));
-            renderTimerText(); if(state.timer.remaining <= 0) { clearInterval(timerInterval); state.timer.isRunning = false; updateTimerBtnUI(); }
+            renderTimerText(); if(state.timer.remaining <= 0) { clearInterval(timerInterval); state.timer.isRunning = false; if(!window.isViewerMode) updateTimerBtnUI(); }
         }
         function renderTimerText() {
             const m = Math.floor(state.timer.remaining / 60).toString().padStart(2, '0'); const s = (state.timer.remaining % 60).toString().padStart(2, '0');
@@ -684,27 +766,21 @@
             else { DOM.timerBox.classList.remove('border-red-500', 'bg-red-900/30'); DOM.timerDisplay.classList.remove('text-red-500', 'animate-pulse'); }
         }
 
-        document.getElementById('btn-timer-start').addEventListener('click', () => {
-            if(state.timer.isRunning) { state.timer.isRunning = false; clearInterval(timerInterval); } 
-            else {
-                const m = parseInt(DOM.timerBoxMin.value)||0; const s = parseInt(DOM.timerBoxSec.value)||0;
-                if(state.timer.remaining <= 0) state.timer.remaining = m*60 + s;
-                state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true; timerInterval = setInterval(tickTimer, 200);
-            }
-            updateTimerBtnUI();
-        });
-        document.getElementById('btn-timer-reset').addEventListener('click', () => {
-            state.timer.isRunning = false; clearInterval(timerInterval); updateTimerBtnUI();
-            state.timer.remaining = (parseInt(DOM.timerBoxMin.value)||0)*60 + (parseInt(DOM.timerBoxSec.value)||0); renderTimerText();
-        });
-
-        document.getElementById('btn-capture').addEventListener('click', () => {
-            const target = document.getElementById('viewer-container'); const ogBg = target.style.backgroundColor; target.style.backgroundColor = '#0f172a';
-            html2canvas(target, { backgroundColor: '#0f172a', scale: 1.5 }).then(canvas => {
-                const link = document.createElement('a'); link.download = `뽑기결과_${new Date().getTime()}.png`;
-                link.href = canvas.toDataURL(); link.click(); target.style.backgroundColor = ogBg;
+        if(!window.isViewerMode) {
+            document.getElementById('btn-timer-start').addEventListener('click', () => {
+                if(state.timer.isRunning) { state.timer.isRunning = false; clearInterval(timerInterval); } 
+                else {
+                    const m = parseInt(DOM.timerBoxMin.value)||0; const s = parseInt(DOM.timerBoxSec.value)||0;
+                    if(state.timer.remaining <= 0) state.timer.remaining = m*60 + s;
+                    state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true; timerInterval = setInterval(tickTimer, 200);
+                }
+                updateTimerBtnUI(); saveState();
             });
-        });
+            document.getElementById('btn-timer-reset').addEventListener('click', () => {
+                state.timer.isRunning = false; clearInterval(timerInterval); updateTimerBtnUI();
+                state.timer.remaining = (parseInt(DOM.timerBoxMin.value)||0)*60 + (parseInt(DOM.timerBoxSec.value)||0); renderTimerText(); saveState();
+            });
+        }
     </script>
 </body>
 </html>
