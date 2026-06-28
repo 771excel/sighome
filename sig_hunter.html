@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V6)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -37,16 +37,17 @@
         .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
-        /* 16:9 이미지 영역 & 텍스트 꽉 채우기 */
+        /* 16:9 이미지 영역 & 단가/이름 2줄 텍스트 */
         .img-container { width: 100%; aspect-ratio: 16/9; background: #f8fafc; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 2px solid #e2e8f0; }
-        .text-container { flex: 1; display: flex; flex-col; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.2rem 0.5rem; overflow: hidden; }
-        .sig-id { font-size: clamp(20px, calc(100vh / var(--grid-rows) * 0.15), 40px); line-height: 1.1; }
-        .sig-name { font-size: clamp(14px, calc(100vh / var(--grid-rows) * 0.08), 30px); line-height: 1.2; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+        .text-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem; overflow: hidden; }
+        
+        .sig-id { font-size: clamp(14px, calc(100vh / var(--grid-rows) * 0.05), 24px); margin-bottom: 4px; line-height: 1; font-weight: 900; }
+        .sig-name { font-size: clamp(18px, calc(100vh / var(--grid-rows) * 0.09), 36px); line-height: 1.1; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 800; }
 
         .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
         @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 30px rgba(251, 191, 36, 1); } }
 
-        /* 상태 변화: 솔드아웃 -> 멤버 획득 -> 배수 공개 */
+        /* 카드 상태 제어 */
         .card-wrapper.is-sold-out .card-front img { filter: grayscale(100%) brightness(0.4); }
         .card-wrapper.is-sold-out .text-container { background-color: #334155; color: #94a3b8; }
         .sold-out-stamp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg); background: rgba(220, 38, 38, 0.95); color: white; font-size: 2.5rem; font-weight: 900; padding: 0.5rem 1.5rem; border-radius: 0.5rem; border: 3px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20; }
@@ -60,7 +61,6 @@
         .card-wrapper.is-claimed .claimed-overlay { opacity: 1; }
         .claimed-badge { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 2px solid white; padding: 6px 20px; border-radius: 30px; font-weight: 900; color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-size: 1.8rem; text-align: center; margin-bottom: 10px; }
         
-        /* 배수 표시 (초기엔 안보임, is-revealed 클래스 추가시 보임) */
         .multiplier-stamp { font-size: 4rem; font-weight: 900; color: #fbbf24; text-shadow: 2px 2px 0 #b45309, -2px -2px 0 #b45309, 2px -2px 0 #b45309, -2px 2px 0 #b45309, 0 5px 15px rgba(0,0,0,0.8); transform: scale(0) rotate(-20deg); opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         .card-wrapper.is-revealed .multiplier-stamp { transform: scale(1) rotate(-10deg); opacity: 1; }
 
@@ -82,12 +82,9 @@
 </head>
 <body class="flex w-full h-screen relative">
 
-    <!-- [좌측] 메인 뷰어 화면 -->
-    <div id="viewer-container" class="flex-1 relative flex flex-col justify-between gap-4 p-6 overflow-hidden">
+    <div id="viewer-container" class="flex-1 relative flex flex-col justify-between gap-4 p-6 overflow-hidden transition-all duration-300">
         
-        <!-- 상단 헤더: 진행률 / 생존자 전광판 / 타이머 (높이 통일) -->
         <div class="flex justify-between items-stretch z-10 w-full mx-auto h-[80px]">
-            <!-- 기본 모드: 완판율 -->
             <div id="progress-wrapper" class="glass-panel p-4 rounded-xl w-[400px] flex flex-col justify-center shadow-xl transition-all h-full">
                 <div class="flex justify-between items-end mb-2">
                     <span class="text-white font-bold text-lg tracking-wide">현재 단계 진행률</span>
@@ -98,7 +95,6 @@
                 </div>
             </div>
 
-            <!-- 생존게임 모드: 생존자 전광판 -->
             <div id="survival-marquee-wrapper" class="glass-panel p-4 rounded-xl w-[600px] hidden flex-col justify-center shadow-xl border-yellow-500/50 h-full overflow-hidden">
                 <div class="text-white font-bold text-sm mb-1 text-center text-yellow-400">🔥 현재 도전 중인 멤버 🔥</div>
                 <div class="marquee-container flex-1">
@@ -106,13 +102,11 @@
                 </div>
             </div>
 
-            <!-- 타이머 -->
             <div id="viewer-timer-box" class="glass-panel px-8 rounded-xl hidden shadow-xl border-2 border-slate-600 transition-colors h-full flex items-center justify-center">
                 <span id="viewer-timer" class="text-white font-mono text-6xl font-black tracking-wider drop-shadow-md">10:00</span>
             </div>
         </div>
 
-        <!-- 카드 그리드 영역 -->
         <div class="flex-1 flex flex-col justify-center items-center relative w-full mx-auto z-10 min-h-0 py-2">
             <div id="card-grid" class="w-full h-full perspective-1000"></div>
             
@@ -131,19 +125,16 @@
             </div>
         </div>
 
-        <!-- 하단 배너 -->
         <div id="banner-wrapper" class="hidden w-full mx-auto z-10 shrink-0">
-            <div class="bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 text-black text-center text-[2.5rem] font-black py-4 rounded-xl shadow-[0_0_20px_rgba(250,204,21,0.5)] border-b-8 border-yellow-700">
+            <div class="bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 text-black text-center text-[2.5rem] font-black py-4 rounded-xl shadow-[0_0_20px_rgba(250,204,21,0.5)] border-b-8 border-yellow-700 flex items-center justify-center">
                 <span id="banner-text">시그헌터 목록 (별풍점수 2배)</span>
             </div>
         </div>
     </div>
 
 
-    <!-- [우측] 관리자 패널 -->
     <div id="admin-panel" class="w-[550px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
-        <!-- 공통 모달 -->
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
             <div class="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-sm w-full shadow-2xl text-center mx-4">
                 <p id="custom-modal-msg" class="text-white mb-6 whitespace-pre-wrap leading-relaxed text-sm font-bold"></p>
@@ -151,7 +142,6 @@
             </div>
         </div>
 
-        <!-- 멤버 선택 팝업 -->
         <div id="member-select-modal" class="absolute inset-0 bg-slate-900/90 z-[150] hidden items-center justify-center backdrop-blur-sm">
             <div class="bg-slate-800 border-2 border-blue-500 rounded-xl p-6 max-w-sm w-full shadow-[0_0_30px_rgba(59,130,246,0.3)] mx-4">
                 <h3 class="text-white text-lg font-black mb-4 text-center">🎯 대상 멤버 선택</h3>
@@ -160,7 +150,6 @@
             </div>
         </div>
 
-        <!-- 미리보기 팝업 -->
         <div id="preview-popup" class="absolute inset-0 bg-slate-900/95 z-[100] hidden flex-col">
             <div class="p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center shrink-0">
                 <h3 id="popup-title" class="text-lg font-black text-yellow-400">00단계 대기목록</h3>
@@ -175,18 +164,19 @@
             <div id="popup-content" class="flex-1 p-4 overflow-y-auto grid grid-cols-3 gap-3 content-start"></div>
         </div>
 
-        <!-- 관리자 상단 헤더 & 모드 상태창 -->
         <div class="bg-slate-950 flex flex-col border-b border-slate-800 shrink-0">
             <div class="p-3 flex justify-between items-center">
                 <h2 class="text-lg font-black text-white">⚙️ 방송 관리자 패널</h2>
-                <button id="btn-copy-link" class="bg-green-600 hover:bg-green-500 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition">🔗 OBS 소스 링크 복사</button>
+                <div class="flex gap-2">
+                    <button id="btn-toggle-viewer" class="bg-yellow-500 hover:bg-yellow-400 text-black text-[11px] font-black px-3 py-1.5 rounded shadow transition">👁️ 뷰어 숨기기</button>
+                    <button id="btn-copy-link" class="bg-green-600 hover:bg-green-500 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition">🔗 링크 복사</button>
+                </div>
             </div>
             <div id="mode-indicator" class="w-full text-center py-1.5 text-xs font-bold tracking-widest text-slate-900 bg-slate-400 transition-colors">
                 일반 모드 활성화 중
             </div>
         </div>
 
-        <!-- ⏱️ 타이머 패널 -->
         <div class="p-4 bg-slate-900 border-b border-slate-700 shadow-xl z-20 shrink-0 relative">
             <div class="bg-slate-800 p-3 rounded-xl border border-slate-600 flex items-center justify-between shadow-inner">
                 <label class="block text-xs font-black text-emerald-400">⏱️ 타이머 조작</label>
@@ -202,22 +192,29 @@
             </div>
         </div>
 
-        <!-- 스크롤 영역 -->
         <div class="flex-1 p-4 overflow-y-auto space-y-4 custom-scroll relative z-10">
             
-            <!-- DB 상태 -->
             <div class="bg-slate-800 p-3 rounded-xl border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
                 <div class="flex justify-between items-center mb-2">
-                    <label class="block text-xs font-bold text-blue-400">☁️ 파이어베이스 원격 연동 상태</label>
+                    <label class="block text-xs font-bold text-blue-400">☁️ 파이어베이스 연동 상태</label>
                     <span id="db-status-badge" class="px-2 py-1 text-[10px] font-bold rounded-full bg-slate-700 text-slate-300">연결 대기중</span>
                 </div>
-                <div class="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-700">
+                <div class="grid grid-cols-2 gap-2 mt-2 border-t border-slate-700 pt-2">
                     <button id="new-game-btn" class="bg-red-900 hover:bg-red-800 text-red-100 font-bold py-1.5 rounded text-[11px] shadow border border-red-700">🔄 전체 기록 초기화</button>
                     <button id="auto-generate-btn" class="bg-indigo-900 hover:bg-indigo-800 text-indigo-100 font-bold py-1.5 rounded text-[11px] shadow border border-indigo-700">✨ 1~16단계 리셋</button>
                 </div>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <button id="save-log-btn" class="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-bold py-1.5 rounded text-[11px] shadow border border-emerald-600">📝 내역 다운</button>
+                    <button id="check-dup-btn" class="bg-rose-900 hover:bg-rose-800 text-rose-100 font-bold py-1.5 rounded text-[11px] shadow border border-rose-700">🔍 중복 번호 검사</button>
+                </div>
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <button id="save-file-btn" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1.5 rounded text-[11px] shadow border border-slate-600">💾 설정값 저장하기</button>
+                    <label class="bg-amber-700 hover:bg-amber-600 text-white font-bold py-1.5 rounded text-[11px] shadow border border-amber-600 flex items-center justify-center cursor-pointer">
+                        📂 설정값 불러오기 <input type="file" id="load-file-input" accept=".json" class="hidden">
+                    </label>
+                </div>
             </div>
 
-            <!-- 모드 설정 및 멤버 관리 -->
             <div class="bg-slate-800 p-4 rounded-xl border-2 border-purple-500/50 relative">
                 <div class="flex justify-between items-center mb-3 border-b border-slate-700 pb-2">
                     <label class="block text-sm font-bold text-purple-400">🎮 방송 모드 선택 및 멤버 관리</label>
@@ -236,7 +233,6 @@
                         <div class="text-xs font-bold text-slate-400 peer-checked:text-red-400">생존 게임</div>
                     </label>
                 </div>
-                
                 <div class="bg-slate-900 p-2 rounded border border-slate-700">
                     <label class="block text-xs font-bold text-slate-300 mb-2">👥 멤버 / 생존자 관리</label>
                     <div class="flex gap-2 mb-2">
@@ -247,18 +243,16 @@
                 </div>
             </div>
 
-            <!-- 화면 및 배너 설정 -->
             <div class="bg-slate-800 p-3 rounded-xl border border-slate-700">
                 <label class="block text-xs font-bold text-amber-400 mb-2">🎨 화면 배열 및 배너 설정</label>
                 <div class="flex items-center gap-2 mb-2">
                     <span class="text-[11px] text-slate-400">가로</span><input type="number" id="input-cols" class="admin-input w-12 text-xs" value="5" min="1" max="10">
                     <span class="text-[11px] text-slate-400">세로</span><input type="number" id="input-rows" class="admin-input w-12 text-xs" value="2" min="1" max="10">
-                    <span class="text-[11px] text-slate-400 ml-2">하단 배너</span><input type="text" id="input-banner" class="admin-input flex-1 text-left px-2 text-[11px]" value="시그헌터 목록">
+                    <span class="text-[11px] text-slate-400 ml-2">하단 배너</span><input type="text" id="input-banner" class="admin-input flex-1 text-left px-2 text-[11px]" value="시그헌터 목록 (별풍점수 2배)">
                 </div>
                 <button id="btn-apply-layout" class="w-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-1.5 rounded shadow">적용하여 화면에 동기화</button>
             </div>
 
-            <!-- 배수 룰 세팅 -->
             <div class="bg-slate-800 p-3 rounded-xl border border-pink-500/50 shadow-sm">
                 <label class="block text-xs font-bold text-pink-400 mb-2">🎲 랜덤 배수 분배 규칙 (헌터 모드용)</label>
                 <div class="bg-slate-900 p-2 rounded border border-slate-700 flex flex-col gap-2">
@@ -277,7 +271,6 @@
                 </div>
             </div>
 
-            <!-- 단계 매니저 -->
             <div>
                 <div class="flex justify-between items-center mb-3 mt-4">
                     <label class="block text-sm font-bold text-indigo-300">🎲 단계별 설정 및 송출</label>
@@ -289,7 +282,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -303,7 +295,7 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v5'); // v5로 업데이트
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v6');
 
         window.syncToCloud = async (stateObj) => {
             if(!window.isViewerMode && window.isFirebaseReady) {
@@ -312,20 +304,18 @@
         };
 
         signInAnonymously(auth).then(() => {
-            // DB 원본 시그니처 연동
             onSnapshot(doc(db, 'signature_boards', 'main_board_data'), (snapshot) => {
                 if (snapshot.exists() && snapshot.data().itemConfigs) {
                     window.firebaseItems = snapshot.data().itemConfigs; window.isFirebaseReady = true;
-                    document.getElementById('db-status-badge').className = "px-2 py-1 text-[10px] font-bold rounded-full bg-blue-600 text-white animate-pulse";
-                    document.getElementById('db-status-badge').innerText = "🟢 실시간 연동중";
+                    // N개 표시 업데이트
+                    document.getElementById('db-status-badge').innerText = `🟢 실시간 연동중 (${window.firebaseItems.length}개)`;
                     
                     if(!window.isViewerMode && window.state && window.state.currentBroadcastStageId) {
-                        window.updateViewerStateOnly(); // 관리자 화면도 리렌더링
+                        window.updateViewerStateOnly(); 
                     }
                 }
             });
 
-            // 뷰어 모드: 원격 제어 수신
             if (window.isViewerMode) {
                 onSnapshot(window.stateDocRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -333,26 +323,22 @@
                         const prevTimestamp = window.state.broadcastTimestamp;
                         window.state = { ...window.state, ...cloudState };
                         
-                        // 화면 레이아웃 동기화
                         document.documentElement.style.setProperty('--grid-cols', state.cols);
                         document.documentElement.style.setProperty('--grid-rows', state.rows);
-                        document.getElementById('banner-text').innerText = state.bannerText;
+                        window.updateBannerUI();
+                        window.updateViewerVisibilityUI();
 
-                        // 타이머 동기화 (Admin에서 On/Off 하거나 Target시간을 바꿀때)
                         if (state.timer.isRunning) {
                             if(!window.timerInterval) window.timerInterval = setInterval(window.tickTimer, 200);
                         } else {
                             clearInterval(window.timerInterval); window.timerInterval = null; window.renderTimerText();
                         }
 
-                        // 송출 명령이 떨어졌을 경우 (애니메이션 렌더링)
                         if (state.broadcastTimestamp && state.broadcastTimestamp !== prevTimestamp) {
                             window.executeBroadcast(state.currentBroadcastStageId, false);
                         } else if (state.currentBroadcastStageId) {
-                            // 단순 클릭 상태 업데이트
                             window.updateViewerStateOnly();
                         } else {
-                            // 초기화 된 경우
                             document.getElementById('empty-state-msg').style.display = 'flex';
                             document.getElementById('card-grid').innerHTML = '';
                             document.getElementById('banner-wrapper').classList.add('hidden');
@@ -367,7 +353,6 @@
         }).catch(e => console.error(e));
     </script>
 
-    <!-- Core App Logic -->
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         window.isViewerMode = urlParams.get('viewer') === 'true';
@@ -396,9 +381,10 @@
             timer: { remaining: 600, isRunning: false, targetEnd: null },
             globalSoldOutList: [], currentBroadcastStageId: null, broadcastTimestamp: null,
             stages: JSON.parse(JSON.stringify(PRESET_STAGES)),
-            gameMode: 'standard', // 'standard', 'hunter', 'survival'
-            members: [], eliminatedMembers: [], // 생존게임용 탈락자
-            multipliers: {}, claimedCards: {}, revealedCards: [] // 카드 상태 제어
+            gameMode: 'standard', 
+            members: [], eliminatedMembers: [],
+            multipliers: {}, claimedCards: {}, revealedCards: [],
+            isViewerHidden: false // 뷰어 숨김 상태 추가
         };
 
         const DOM = {
@@ -408,25 +394,68 @@
 
         window.addEventListener('DOMContentLoaded', () => {
             if (!window.isViewerMode) {
-                const saved = localStorage.getItem('sigHunterState_v5');
+                const saved = localStorage.getItem('sigHunterState_v6');
                 if(saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                 DOM.inCols.value = state.cols; DOM.inRows.value = state.rows; DOM.inBanner.value = state.bannerText;
                 document.querySelector(`input[name="gameMode"][value="${state.gameMode}"]`).checked = true;
                 updateModeIndicator(); renderMembers(); renderAdminStages();
+                window.updateViewerVisibilityUI();
             }
         });
 
         function saveState() {
             if (window.isViewerMode) return;
-            localStorage.setItem('sigHunterState_v5', JSON.stringify(state));
+            localStorage.setItem('sigHunterState_v6', JSON.stringify(state));
             if(window.syncToCloud) window.syncToCloud(state);
         }
 
-        // --- 관리자 UI 이벤트 바인딩 ---
+        // --- 뷰어 숨기기 컨트롤러 ---
+        window.updateViewerVisibilityUI = function() {
+            const vc = document.getElementById('viewer-container');
+            if (state.isViewerHidden) {
+                vc.style.visibility = 'hidden'; // 화면에서 완전히 감춤
+                if(!window.isViewerMode) document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 표시하기';
+            } else {
+                vc.style.visibility = 'visible';
+                if(!window.isViewerMode) document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 숨기기';
+            }
+        }
+
+        // --- 부가기능 (기록 저장, 중복확인, 프리셋) ---
         if(!window.isViewerMode) {
+            document.getElementById('btn-toggle-viewer').addEventListener('click', () => {
+                state.isViewerHidden = !state.isViewerHidden; saveState(); window.updateViewerVisibilityUI();
+            });
+
+            document.getElementById('check-dup-btn').addEventListener('click', () => {
+                const locs = {}; state.stages.forEach(s => s.previewNumbers.forEach(n => { if(!locs[n]) locs[n]=[]; locs[n].push(s.name); }));
+                const dups = Object.entries(locs).filter(([_, l]) => l.length > 1);
+                if(dups.length>0) showModal("⚠️ 중복 발견!\n" + dups.map(([n, l]) => `[${n}] : ${l.join(', ')}`).join('\n'));
+                else showModal("✅ 대기목록 내 중복 번호가 없습니다.");
+            });
+
+            document.getElementById('save-log-btn').addEventListener('click', () => {
+                let txt = `[ 시그헌터 판매 기록 ]\n총 판매 개수: ${state.globalSoldOutList.length}\n==================\n`;
+                state.globalSoldOutList.forEach(n => { txt += `[ ${n} ] - ${state.claimedCards[n] ? state.claimedCards[n] + ' 획득 ('+ (state.multipliers[n]||1) +'배)' : '솔드아웃'}\n`; });
+                const blob = new Blob([txt], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='판매기록.txt'; a.click();
+            });
+
+            document.getElementById('save-file-btn').addEventListener('click', () => {
+                const blob = new Blob([JSON.stringify(state, null, 2)], {type: 'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='시그헌터_프리셋.json'; a.click();
+            });
+
+            document.getElementById('load-file-input').addEventListener('change', e => {
+                const f = e.target.files[0]; if(!f) return; const r = new FileReader();
+                r.onload = ev => { try { state = {...state, ...JSON.parse(ev.target.result)}; saveState(); location.reload(); } catch(err) { showModal("올바른 JSON 파일이 아닙니다."); } }; r.readAsText(f);
+            });
+
+            // 화면 배열 동기화 강제 렌더링
             document.getElementById('btn-apply-layout').addEventListener('click', () => {
                 state.cols = DOM.inCols.value; state.rows = DOM.inRows.value; state.bannerText = DOM.inBanner.value;
-                saveState(); showModal("화면 레이아웃 및 배너가 뷰어에 동기화되었습니다.");
+                saveState(); 
+                if(state.currentBroadcastStageId) { window.executeBroadcast(state.currentBroadcastStageId, true); } 
+                else { document.documentElement.style.setProperty('--grid-cols', state.cols); document.documentElement.style.setProperty('--grid-rows', state.rows); window.updateBannerUI(); }
+                showModal("화면 배열 및 배너가 화면에 동기화되었습니다.");
             });
 
             document.querySelectorAll('input[name="gameMode"]').forEach(r => r.addEventListener('change', e => {
@@ -438,18 +467,27 @@
                 navigator.clipboard.writeText(url).then(() => showModal("OBS 브라우저 소스용 링크 복사 완료!\n\n" + url));
             });
 
-            // 멤버 관리
             document.getElementById('btn-add-member').addEventListener('click', () => {
                 const v = document.getElementById('input-member').value.trim();
                 if(v && !state.members.includes(v)) { state.members.push(v); document.getElementById('input-member').value=''; saveState(); renderMembers(); window.updateViewerStateOnly(); }
             });
 
-            // 배수 룰 일괄 적용
             document.getElementById('btn-apply-global-multi').addEventListener('click', () => {
                 const isExact = document.getElementById('rule-exact').checked;
                 state.stages.forEach(stage => applyMultiplierRule(stage, isExact));
                 saveState(); renderAdminStages(); showModal("모든 대기목록에 배수 규칙이 일괄 적용되었습니다.\n크게보기/설정 창에서 확인 가능합니다.");
             });
+        }
+
+        // 배너 텍스트 업데이트 헬퍼 (단계 강조)
+        window.updateBannerUI = function() {
+            const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
+            const textSpan = `<span>${state.bannerText}</span>`;
+            if (stage) {
+                document.getElementById('banner-text').innerHTML = `<span class="text-white bg-red-600 px-5 py-1.5 rounded-2xl mr-4 border-4 border-red-800 shadow-xl inline-block -translate-y-1">[ ${stage.name} ]</span>${textSpan}`;
+            } else {
+                document.getElementById('banner-text').innerHTML = textSpan;
+            }
         }
 
         function updateModeIndicator() {
@@ -476,7 +514,7 @@
         window.removeMember = (m) => { state.members = state.members.filter(x => x !== m); state.eliminatedMembers = state.eliminatedMembers.filter(x => x !== m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
         window.toggleSurvival = (m) => { if(state.eliminatedMembers.includes(m)) state.eliminatedMembers = state.eliminatedMembers.filter(x=>x!==m); else state.eliminatedMembers.push(m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
 
-        // --- 단계별 렌더링 (관리자) ---
+        // --- 관리자 단계 렌더링 ---
         function renderAdminStages() {
             if(window.isViewerMode) return;
             const container = document.getElementById('stages-container'); container.innerHTML = '';
@@ -527,13 +565,12 @@
         function applyMultiplierRule(stage, isExact) {
             if(stage.previewNumbers.length === 0) return;
             if(isExact) {
-                const ruleStr = document.getElementById('multi-exact-str').value; // e.g. "2:3, 5:1"
+                const ruleStr = document.getElementById('multi-exact-str').value;
                 let multiPool = [];
                 ruleStr.split(',').forEach(part => {
                     const [multi, count] = part.split(':').map(n => parseInt(n.trim()));
                     if(!isNaN(multi) && !isNaN(count)) for(let i=0; i<count; i++) multiPool.push(multi);
                 });
-                // 남는 자리는 1로 채우고 섞기
                 while(multiPool.length < stage.previewNumbers.length) multiPool.push(1);
                 multiPool.sort(() => Math.random() - 0.5);
                 stage.previewNumbers.forEach((n, i) => state.multipliers[n] = multiPool[i] || 1);
@@ -560,7 +597,6 @@
             
             stage.previewNumbers = [...new Set(drawn)].sort((a,b)=>a-b);
             
-            // 룰 기반 배수 자동 적용 (관리자 패널이 있을때만)
             if(document.getElementById('rule-exact')) {
                 const isExact = document.getElementById('rule-exact').checked;
                 applyMultiplierRule(stage, isExact);
@@ -575,7 +611,7 @@
             });
         }
 
-        // --- 미리보기(크게보기) 팝업 ---
+        // --- 미리보기(크게보기) ---
         let currentPreviewStageId = null;
         window.openPreviewPopup = (id) => {
             const stage = state.stages.find(s => s.id === id); if(!stage) return;
@@ -621,9 +657,9 @@
         }
         window.updateMultiplier = (num, val) => { state.multipliers[num] = parseInt(val)||1; saveState(); };
 
-        // --- 송출 및 화면 렌더링 ---
+        // --- 송출 렌더링 ---
         window.triggerBroadcast = (id) => {
-            state.broadcastTimestamp = Date.now(); // 뷰어 강제 렌더링 애니메이션 트리거
+            state.broadcastTimestamp = Date.now(); // 뷰어 강제 렌더링(플립효과) 트리거
             executeBroadcast(id, false);
         }
 
@@ -633,14 +669,12 @@
             
             if(!isRestore) { stage.broadcastNumbers = [...stage.previewNumbers]; state.currentBroadcastStageId = id; saveState(); }
 
-            // UI 보이기 설정
             document.getElementById('empty-state-msg').style.display = 'none';
             document.getElementById('banner-wrapper').classList.remove('hidden');
             document.getElementById('viewer-timer-box').classList.remove('hidden');
             document.getElementById('stage-clear-overlay').classList.remove('show');
-            document.getElementById('banner-text').innerText = state.bannerText;
+            window.updateBannerUI(); // 배너 단계 강조
             
-            // 모드에 따른 상단 패널 (진행률 vs 전광판)
             if (state.gameMode === 'survival') {
                 document.getElementById('progress-wrapper').classList.replace('flex', 'hidden');
                 document.getElementById('survival-marquee-wrapper').classList.replace('hidden', 'flex');
@@ -651,7 +685,6 @@
 
             const grid = document.getElementById('card-grid');
             grid.innerHTML = '';
-            // 16:9 비율 유지 & 텍스트를 위한 그리드 갭/비율 맞춤 (CSS var로 처리됨)
             
             stage.broadcastNumbers.forEach((num, i) => {
                 const fbItem = window.firebaseItems.find(item => item.id === num);
@@ -668,14 +701,13 @@
                 wrapper.className = `card-wrapper cursor-pointer w-full h-full relative ${isVIP ? 'vip-glow' : ''} ${isSoldOut ? 'is-sold-out' : ''} ${isClaimed ? 'is-claimed' : ''} ${isRevealed ? 'is-revealed' : ''}`;
                 wrapper.dataset.number = num; 
                 
-                // 관리자만 클릭 허용
                 if(!window.isViewerMode) wrapper.onclick = () => handleCardClick(num, wrapper);
 
                 wrapper.innerHTML = `
                     <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
                         <div class="card-front">
                             <div class="img-container">
-                                ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold">이미지 없음</span>'}
+                                ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
                             </div>
                             <div class="text-container">
                                 <span class="sig-id font-black ${isSoldOut && !isClaimed ? 'text-slate-400' : 'text-red-600'} drop-shadow-sm">[ ${num} ]</span>
@@ -700,13 +732,14 @@
                 state.timer.remaining = tMin * 60 + tSec; state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true;
                 if(!window.isViewerMode) { document.getElementById('timer-min').value = tMin; document.getElementById('timer-sec').value = tSec; updateTimerBtnUI(); }
                 window.timerInterval = setInterval(window.tickTimer, 200); window.renderTimerText();
-                saveState(); // 뷰어 트리거용
+                saveState();
             }
             if(!window.isViewerMode) renderAdminStages(); 
-            window.updateViewerStateOnly(); // 상태 업데이트 (전광판 등)
+            window.updateViewerStateOnly(); 
+            window.updateViewerVisibilityUI();
         }
 
-        // --- 실시간 렌더링 업데이트 (DOM 갈아끼우지 않고 클래스만 제어) ---
+        // --- 상태 변화 실시간 렌더링 ---
         window.updateViewerStateOnly = function() {
             if(!state.currentBroadcastStageId) return;
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
@@ -719,7 +752,6 @@
                     const isClaimed = !!state.claimedCards[num];
                     const isRevealed = state.revealedCards.includes(num);
 
-                    // 클래스 초기화
                     wrapper.classList.remove('is-sold-out', 'is-claimed', 'is-revealed');
                     
                     if (isSoldOut && !isClaimed) wrapper.classList.add('is-sold-out');
@@ -742,37 +774,15 @@
             if(percent >= 80 && percent < 100) pw.classList.add('warning-active'); else pw.classList.remove('warning-active');
             if(percent === 100 && total > 0) document.getElementById('stage-clear-overlay').classList.add('show'); else document.getElementById('stage-clear-overlay').classList.remove('show');
 
-            // 생존게임 전광판 업데이트
+            // 생존게임 전광판 업데이트 (획득 안 한 멤버 계속 유지)
             if(state.gameMode === 'survival') {
                 const claimedNames = Object.values(state.claimedCards);
-                // 생존자: 전체 멤버 중 (탈락자 제외) && (현재 라운드 획득자 제외)
                 const survivors = state.members.filter(m => !state.eliminatedMembers.includes(m) && !claimedNames.includes(m));
                 document.getElementById('marquee-text').innerText = survivors.length > 0 ? survivors.join(' 🏃‍♂️ ') : '남은 도전자 없음';
             }
-
-            if(!window.isViewerMode) {
-                document.getElementById('undo-count').innerText = `${soldCount}개 기록됨`; 
-                const ul = document.getElementById('undo-list-container'); ul.innerHTML = '';
-                if(soldCount === 0) ul.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">기록이 없습니다.</div>';
-                else {
-                    stage.broadcastNumbers.filter(n => state.globalSoldOutList.includes(n) || state.claimedCards[n]).forEach(num => {
-                        const claimTxt = state.claimedCards[num] ? `<span class="text-blue-400">(${state.claimedCards[num]})</span>` : '';
-                        const btn = document.createElement('button');
-                        btn.className = "bg-slate-800 hover:bg-red-800 border border-slate-600 text-white text-[11px] px-2 py-1 rounded flex items-center gap-1 transition group";
-                        btn.innerHTML = `<span class="text-red-400 group-hover:text-white">↺ 복구</span> <span class="font-bold ml-1">${num}</span> ${claimTxt}`;
-                        btn.onclick = () => { 
-                            state.globalSoldOutList = state.globalSoldOutList.filter(n=>n!==num); 
-                            delete state.claimedCards[num]; 
-                            state.revealedCards = state.revealedCards.filter(n=>n!==num);
-                            saveState(); window.updateViewerStateOnly(); 
-                        };
-                        ul.appendChild(btn);
-                    });
-                }
-            }
         }
 
-        // --- 카드 클릭 사이클 제어 ---
+        // --- 클릭 사이클 제어 ---
         let pendingClaimNum = null; 
         function handleCardClick(num, wrapperElement) {
             const isSold = state.globalSoldOutList.includes(num); 
@@ -780,36 +790,22 @@
             const isRevealed = state.revealedCards.includes(num);
 
             if (state.gameMode === 'standard') {
-                // 일반 모드: Toggle SoldOut
                 if (!isSold) state.globalSoldOutList.push(num);
                 else state.globalSoldOutList = state.globalSoldOutList.filter(n => n !== num);
             } 
             else if (state.gameMode === 'hunter') {
-                // 헌터 모드: (1)솔드아웃 -> (2)멤버선택 팝업 -> (3)배수공개 -> (4)초기화
-                if (!isSold && !isClaimed) {
-                    state.globalSoldOutList.push(num); // 1. 솔드아웃
-                } else if (isSold && !isClaimed) {
-                    openMemberModal(num); // 2. 멤버 지정 팝업
-                    return; 
-                } else if (isClaimed && !isRevealed) {
-                    state.revealedCards.push(num); // 3. 배수 공개
-                } else {
-                    // 4. 초기화
+                if (!isSold && !isClaimed) { state.globalSoldOutList.push(num); } 
+                else if (isSold && !isClaimed) { openMemberModal(num); return; } 
+                else if (isClaimed && !isRevealed) { state.revealedCards.push(num); } 
+                else {
                     state.globalSoldOutList = state.globalSoldOutList.filter(n => n !== num);
-                    delete state.claimedCards[num];
-                    state.revealedCards = state.revealedCards.filter(n => n !== num);
+                    delete state.claimedCards[num]; state.revealedCards = state.revealedCards.filter(n => n !== num);
                 }
             } 
             else if (state.gameMode === 'survival') {
-                // 생존 모드: (1)멤버선택 팝업 -> (2)초기화 (솔드아웃 없음)
-                if (!isClaimed) {
-                    openMemberModal(num, true); // 생존자만
-                    return;
-                } else {
-                    delete state.claimedCards[num];
-                }
+                if (!isClaimed) { openMemberModal(num, true); return; } 
+                else { delete state.claimedCards[num]; }
             }
-
             saveState(); window.updateViewerStateOnly();
         }
 
@@ -832,7 +828,7 @@
         }
         window.closeMemberModal = function() { document.getElementById('member-select-modal').classList.replace('flex', 'hidden'); pendingClaimNum = null; }
 
-        // --- 타이머 동기화 ---
+        // --- 타이머 ---
         window.timerInterval = null;
         function updateTimerBtnUI() {
             const btn = document.getElementById('btn-timer-start');
