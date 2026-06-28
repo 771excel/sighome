@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V13)</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V14)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -27,30 +27,35 @@
         
         #card-grid {
             display: grid; grid-template-columns: repeat(var(--grid-cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
-            gap: 0.8rem; transition: all 0.5s ease; height: 100%; min-height: 0;
+            gap: 0.8rem; transition: all 0.5s ease; height: 100%; min-height: 0; min-width: 0;
         }
         
         .perspective-1000 { perspective: 1000px; }
+        
+        /* 카드 래퍼가 무조건 그리드 셀 크기에 맞게 축소되도록 제어 */
+        .card-wrapper { width: 100%; height: 100%; min-height: 0; min-width: 0; position: relative; }
         .card-inner { width: 100%; height: 100%; position: relative; transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform-style: preserve-3d; }
         .card-inner.is-flipped { transform: rotateY(180deg); }
         .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.75rem; overflow: hidden; }
         
-        /* 반응형 스케일링을 위한 컨테이너 쿼리 */
-        .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); container-type: inline-size; }
+        /* 카드 내부에 Container Query(size)를 적용해 글자/패딩을 반응형으로 만듦 */
+        .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); container-type: size; }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
-        /* 이미지 비율 고정(60%), 텍스트(40%) */
-        .img-container { width: 100%; height: 60%; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 3px solid #cbd5e1; }
-        .text-container { flex: 1; height: 40%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem 0.8rem; overflow: hidden; width: 100%; }
+        /* 이미지(60%) 텍스트(40%) 비율 절대 고정 */
+        .img-container { flex: 0 0 60%; width: 100%; height: 60%; background: #0f172a; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 3px solid #cbd5e1; }
+        .text-container { flex: 0 0 40%; width: 100%; height: 40%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 1cqmin; overflow: hidden; }
         
-        /* 반응형 텍스트 크기 조정 (cqi 기반) */
-        .sig-id { font-size: clamp(10px, 9cqi, 40px); margin-bottom: 2px; line-height: 1; font-weight: 900; color: #dc2626; text-shadow: 1px 1px 0px rgba(0,0,0,0.1); }
+        /* 폰트가 카드 크기(cqmin)에 비례하여 축소/확대되도록 clamp 처리 */
+        .sig-id { font-size: clamp(10px, 15cqmin, 50px); margin-bottom: 2cqmin; line-height: 1; font-weight: 900; color: #dc2626; text-shadow: 1px 1px 0px rgba(0,0,0,0.1); }
         
-        .sig-name-container { width: 100%; overflow: hidden; white-space: nowrap; display: flex; justify-content: center; align-items: center; }
+        .sig-name-container { container-type: inline-size; width: 100%; overflow: hidden; white-space: nowrap; display: flex; justify-content: center; align-items: center; }
         .sig-name-text { 
-            font-size: clamp(12px, 12cqi, 36px); 
+            font-size: clamp(12px, 18cqmin, 40px); 
             line-height: 1.2; font-weight: 900; display: inline-block; color: #1e293b; letter-spacing: -0.5px;
         }
+        
+        /* 글씨 왕복 슬라이드 애니메이션 */
         .sig-name-text.is-scrolling { animation: scroll-text 4s linear infinite alternate; }
         @keyframes scroll-text {
             0%, 15% { transform: translateX(0); }
@@ -60,12 +65,13 @@
         .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
         @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 30px rgba(251, 191, 36, 1); } }
 
+        /* 솔드아웃, 배수, 뱃지 등 UI도 카드 크기에 비례(cqmin)하도록 스케일링 적용 */
         .card-wrapper.is-sold-out .card-front img { filter: grayscale(100%) brightness(0.4); }
         .card-wrapper.is-sold-out .text-container { background-color: #334155; }
         .card-wrapper.is-sold-out .sig-id { color: #94a3b8; }
         .card-wrapper.is-sold-out .sig-name-text { color: #cbd5e1; }
         
-        .sold-out-stamp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg); background: rgba(220, 38, 38, 0.95); color: white; font-size: 3rem; font-weight: 900; padding: 0.5rem 2rem; border-radius: 0.5rem; border: 4px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.6); opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20; white-space: nowrap; text-align: center; }
+        .sold-out-stamp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg); background: rgba(220, 38, 38, 0.95); color: white; font-size: clamp(18px, 20cqmin, 60px); font-weight: 900; padding: 2cqmin 6cqmin; border-radius: 2cqmin; border: 4px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.6); opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20; white-space: nowrap; text-align: center; }
         .card-wrapper.is-sold-out .sold-out-stamp { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-5deg); }
 
         .card-wrapper.is-claimed .card-front img { filter: grayscale(0%) brightness(1); }
@@ -74,9 +80,9 @@
         
         .claimed-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 30; border-radius: 0.75rem; }
         .card-wrapper.is-claimed .claimed-overlay { opacity: 1; }
-        .claimed-badge { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 3px solid white; padding: 8px 30px; border-radius: 30px; font-weight: 900; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-size: 2.2rem; text-align: center; margin-bottom: 15px; }
+        .claimed-badge { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 3px solid white; padding: 3cqmin 8cqmin; border-radius: 30px; font-weight: 900; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-size: clamp(14px, 15cqmin, 40px); text-align: center; margin-bottom: 5cqmin; }
         
-        .multiplier-stamp { font-size: 5.5rem; font-weight: 900; color: #ffeb3b; text-shadow: 3px 3px 0 #d94a00, -3px -3px 0 #d94a00, 3px -3px 0 #d94a00, -3px 3px 0 #d94a00, 0 10px 20px rgba(0,0,0,0.8); filter: drop-shadow(0 0 10px rgba(255, 235, 59, 0.4)); transform: scale(0) rotate(-20deg); opacity: 0; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .multiplier-stamp { font-size: clamp(30px, 35cqmin, 100px); font-weight: 900; color: #ffeb3b; text-shadow: 3px 3px 0 #d94a00, -3px -3px 0 #d94a00, 3px -3px 0 #d94a00, -3px 3px 0 #d94a00, 0 10px 20px rgba(0,0,0,0.8); filter: drop-shadow(0 0 10px rgba(255, 235, 59, 0.4)); transform: scale(0) rotate(-20deg); opacity: 0; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         .card-wrapper.is-revealed .multiplier-stamp { transform: scale(1) rotate(-10deg); opacity: 1; }
 
         @keyframes warning-blink { 0%, 100% { background-color: rgba(15, 23, 42, 0.8); border-color: rgba(255,255,255,0.1); } 50% { background-color: rgba(185, 28, 28, 0.7); border-color: #ef4444; } }
@@ -84,8 +90,7 @@
         #stage-clear-overlay { opacity: 0; pointer-events: none; transform: scale(0.9); transition: all 0.8s; }
         #stage-clear-overlay.show { opacity: 1; transform: scale(1); pointer-events: auto; }
 
-        /* 생존게임 전광판 개선 (컨테이너 쿼리 지원) */
-        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; container-type: inline-size; }
+        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; }
         .marquee-container.center-mode { justify-content: center; }
         .marquee-content { display: flex; align-items: center; gap: 1.5rem; }
         .marquee-content.animate { animation: marquee linear infinite; }
@@ -134,7 +139,7 @@
         </div>
 
         <div class="flex justify-between items-stretch z-10 w-full mx-auto h-[85px]">
-            <div id="progress-wrapper" class="glass-panel p-5 rounded-2xl w-[420px] flex flex-col justify-center transition-all h-full">
+            <div id="progress-wrapper" class="glass-panel p-5 rounded-2xl w-[420px] flex flex-col justify-center transition-all h-full shrink-0">
                 <div class="flex justify-between items-end mb-2">
                     <span class="text-white font-black text-xl tracking-wide">현재 진행률</span>
                     <span id="progress-text" class="text-yellow-400 font-black text-3xl leading-none">0 / 0</span>
@@ -144,14 +149,14 @@
                 </div>
             </div>
 
-            <div id="survival-marquee-wrapper" class="glass-panel px-6 py-4 rounded-2xl w-[900px] hidden flex-row items-center gap-6 transition-all border-yellow-500/50 h-full overflow-hidden">
+            <div id="survival-marquee-wrapper" class="glass-panel px-6 py-4 rounded-2xl w-[900px] hidden flex-row items-center gap-6 transition-all border-yellow-500/50 h-full overflow-hidden shrink-0">
                 <div class="text-yellow-400 font-black text-2xl tracking-widest shrink-0 border-r-2 border-yellow-600/50 pr-6">도전 멤버</div>
-                <div id="marquee-container" class="marquee-container flex-1 h-full">
+                <div id="marquee-container" class="marquee-container flex-1 h-full" style="container-type: inline-size;">
                     <div id="marquee-text" class="marquee-content h-full"></div>
                 </div>
             </div>
 
-            <div id="viewer-timer-box" class="glass-panel px-10 rounded-2xl hidden transition-colors h-full flex items-center justify-center">
+            <div id="viewer-timer-box" class="glass-panel px-10 rounded-2xl hidden transition-colors h-full flex items-center justify-center shrink-0 ml-auto">
                 <span id="viewer-timer" class="text-white font-mono text-6xl font-black tracking-wider drop-shadow-lg">10:00</span>
             </div>
         </div>
@@ -360,7 +365,7 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v13');
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v14'); // V14
 
         window.syncToCloud = async (stateObj) => {
             if(!window.isViewerMode && !window.isLogMode && window.isFirebaseReady) {
@@ -378,7 +383,7 @@
                         window.state = { ...window.state, ...cloudState };
                         if(!window.state.actionLogs) window.state.actionLogs = [];
                     } else {
-                        const saved = localStorage.getItem('sigHunterState_v13');
+                        const saved = localStorage.getItem('sigHunterState_v14');
                         if (saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                     }
                 } catch(e) { console.error("Cloud state load error", e); }
@@ -519,7 +524,7 @@
 
         window.saveState = function() {
             if (window.isViewerMode || window.isLogMode) return;
-            localStorage.setItem('sigHunterState_v13', JSON.stringify(state)); 
+            localStorage.setItem('sigHunterState_v14', JSON.stringify(state)); 
             if(window.syncToCloud) window.syncToCloud(state); 
         };
 
@@ -1119,6 +1124,7 @@
             else { tb.classList.remove('border-red-500', 'bg-red-900/30'); td.classList.remove('text-red-500', 'animate-pulse'); }
         };
 
+        // --- 이벤트 바인딩 처리 ---
         window.addEventListener('DOMContentLoaded', () => {
             if(!window.isViewerMode && !window.isLogMode) {
                 document.getElementById('btn-toggle-viewer')?.addEventListener('click', () => {
