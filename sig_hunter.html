@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V7)</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V8)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -36,11 +36,16 @@
         .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
-        .img-container { width: 100%; aspect-ratio: 16/9; background: #f8fafc; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 2px solid #e2e8f0; }
+        .img-container { width: 100%; aspect-ratio: 16/9; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 2px solid #e2e8f0; }
         .text-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem; overflow: hidden; }
         
-        .sig-id { font-size: clamp(14px, calc(100vh / var(--grid-rows) * 0.05), 24px); margin-bottom: 4px; line-height: 1; font-weight: 900; }
-        .sig-name { font-size: clamp(18px, calc(100vh / var(--grid-rows) * 0.09), 36px); line-height: 1.1; width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 800; }
+        .sig-id { font-size: clamp(14px, calc(100vh / var(--grid-rows) * 0.05), 26px); margin-bottom: 2px; line-height: 1; font-weight: 900; }
+        .sig-name { 
+            font-size: clamp(16px, calc(100vh / var(--grid-rows) * 0.08), 34px); 
+            line-height: 1.2; width: 100%; text-align: center; font-weight: 800;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; 
+            overflow: hidden; text-overflow: ellipsis; word-break: keep-all; 
+        }
 
         .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
         @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 30px rgba(251, 191, 36, 1); } }
@@ -66,8 +71,10 @@
         #stage-clear-overlay { opacity: 0; pointer-events: none; transform: scale(0.9); transition: all 0.8s; }
         #stage-clear-overlay.show { opacity: 1; transform: scale(1); pointer-events: auto; }
 
-        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; }
-        .marquee-content { display: inline-block; animation: marquee 15s linear infinite; font-size: 1.5rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; }
+        .marquee-container.center-mode { justify-content: center; }
+        .marquee-content { display: flex; align-items: center; gap: 0.5rem; }
+        .marquee-content.animate { animation: marquee 15s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
         #admin-panel { background-color: #0f172a; }
@@ -78,7 +85,18 @@
 </head>
 <body class="flex w-full h-screen relative">
 
+    <!-- [좌측] 메인 뷰어 화면 (숨김 제어) -->
     <div id="viewer-container" class="flex-1 relative flex flex-col justify-between gap-4 p-6 overflow-hidden transition-all duration-300">
+        
+        <!-- 관리자 화면에서만 보이는 숨김 경고창 -->
+        <div id="admin-viewer-hidden-warning" class="absolute inset-0 bg-black/60 z-[100] hidden flex-col items-center justify-center backdrop-blur-sm pointer-events-none">
+            <i class="ph-fill ph-eye-slash text-6xl text-red-500 mb-4 animate-pulse"></i>
+            <div class="bg-red-600 text-white font-black px-8 py-4 rounded-2xl text-2xl shadow-2xl border-4 border-red-800 text-center">
+                🚨 현재 OBS 송출 화면이 숨김 처리 되었습니다!<br>
+                <span class="text-sm font-bold text-red-200 mt-2 block">관리자 패널에서는 화면이 계속 보이지만, 뷰어(OBS)에서는 투명하게 사라집니다.</span>
+            </div>
+        </div>
+
         <div class="flex justify-between items-stretch z-10 w-full mx-auto h-[80px]">
             <div id="progress-wrapper" class="glass-panel p-4 rounded-xl w-[400px] flex flex-col justify-center shadow-xl transition-all h-full">
                 <div class="flex justify-between items-end mb-2">
@@ -90,9 +108,9 @@
                 </div>
             </div>
 
-            <div id="survival-marquee-wrapper" class="glass-panel p-4 rounded-xl w-[600px] hidden flex-col justify-center shadow-xl border-yellow-500/50 h-full overflow-hidden">
-                <div class="text-white font-bold text-sm mb-1 text-center text-yellow-400">🔥 현재 도전 중인 멤버 🔥</div>
-                <div class="marquee-container flex-1">
+            <div id="survival-marquee-wrapper" class="glass-panel p-4 rounded-xl w-[700px] hidden flex-col justify-center shadow-xl border-yellow-500/50 h-full overflow-hidden">
+                <div class="text-white font-bold text-[13px] mb-1 text-center text-yellow-400">🔥 생존 게임 - 현재 도전 중인 멤버 🔥</div>
+                <div id="marquee-container" class="marquee-container flex-1">
                     <div id="marquee-text" class="marquee-content"></div>
                 </div>
             </div>
@@ -128,6 +146,7 @@
     </div>
 
 
+    <!-- [우측] 관리자 패널 -->
     <div id="admin-panel" class="w-[550px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
@@ -238,6 +257,19 @@
                 </div>
             </div>
 
+            <!-- 강력한 Undo (솔드아웃 복구) 패널 강조 -->
+            <div class="bg-slate-800 p-4 rounded-xl border border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)] relative overflow-hidden">
+                <div class="absolute inset-0 bg-red-900/10 pointer-events-none"></div>
+                <div class="flex justify-between items-center mb-2 relative z-10">
+                    <label class="block text-sm font-black text-red-400">↩️ 잘못 클릭한 번호 즉시 복구</label>
+                    <span id="undo-count" class="text-[11px] text-red-300 font-bold bg-slate-900 px-2 py-0.5 rounded border border-red-800">0개 기록됨</span>
+                </div>
+                <p class="text-[10px] text-slate-400 mb-3 relative z-10 leading-tight">송출 중인 화면에서 잘못 클릭된 카드를 누르면 즉시 이전 상태로 되돌립니다.</p>
+                <div id="undo-list-container" class="flex flex-wrap gap-1.5 min-h-[40px] max-h-[120px] overflow-y-auto bg-slate-900 p-2 rounded border border-slate-700 custom-scroll relative z-10">
+                    <div class="text-xs text-slate-600 w-full text-center py-2">판매/획득 기록이 없습니다.</div>
+                </div>
+            </div>
+
             <div class="bg-slate-800 p-3 rounded-xl border border-slate-700">
                 <label class="block text-xs font-bold text-amber-400 mb-2">🎨 화면 배열 및 배너 설정</label>
                 <div class="flex items-center gap-2 mb-2">
@@ -245,24 +277,24 @@
                     <span class="text-[11px] text-slate-400">세로</span><input type="number" id="input-rows" class="admin-input w-12 text-xs" value="2" min="1" max="10">
                     <span class="text-[11px] text-slate-400 ml-2">하단 배너</span><input type="text" id="input-banner" class="admin-input flex-1 text-left px-2 text-[11px]" placeholder="배너 텍스트 입력">
                 </div>
-                <button id="btn-apply-layout" class="w-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-1.5 rounded shadow">적용하여 화면에 동기화</button>
+                <button id="btn-apply-layout" class="w-full bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold py-1.5 rounded shadow">적용하여 뷰어 화면에 동기화</button>
             </div>
 
             <div class="bg-slate-800 p-3 rounded-xl border border-pink-500/50 shadow-sm">
-                <label class="block text-xs font-bold text-pink-400 mb-2">🎲 랜덤 배수 분배 규칙 (헌터 모드용)</label>
+                <label class="block text-xs font-bold text-pink-400 mb-2">🎲 배수 분배 규칙 (동시 적용 가능)</label>
                 <div class="bg-slate-900 p-2 rounded border border-slate-700 flex flex-col gap-2">
-                    <div class="flex items-center gap-2">
-                        <input type="radio" name="multiRule" value="range" id="rule-range" checked class="accent-pink-500">
-                        <label for="rule-range" class="text-[11px] text-slate-300">최소 <input type="number" id="multi-min" class="admin-input w-10 py-0.5 px-0" value="1"> 배 ~ 최대 <input type="number" id="multi-max" class="admin-input w-10 py-0.5 px-0" value="5"> 배 랜덤</label>
+                    <div class="flex flex-col mb-1 border-b border-slate-700 pb-2">
+                        <label class="text-[11px] text-slate-300 font-bold mb-1">1. 특정 배수 고정 개수 할당</label>
+                        <input type="text" id="multi-exact-str" class="admin-input w-full text-[10px] py-1" placeholder="예: 5배:2, 3배:1 (입력 안하면 무시)">
                     </div>
-                    <div class="flex items-start gap-2">
-                        <input type="radio" name="multiRule" value="exact" id="rule-exact" class="accent-pink-500 mt-1">
-                        <div class="flex flex-col">
-                            <label for="rule-exact" class="text-[11px] text-slate-300">특정 배수 고정 개수 할당</label>
-                            <input type="text" id="multi-exact-str" class="admin-input w-full text-[10px] py-1 mt-1" placeholder="예: 2배:3, 5배:1 (나머진 1배)">
+                    <div class="flex flex-col mb-1">
+                        <label class="text-[11px] text-slate-300 font-bold mb-1">2. 나머지 카드 배수 랜덤 범위</label>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] text-slate-400">최소</span><input type="number" id="multi-min" class="admin-input w-12 py-0.5 px-0" value="1">
+                            <span class="text-[10px] text-slate-400">~ 최대</span><input type="number" id="multi-max" class="admin-input w-12 py-0.5 px-0" value="5">
                         </div>
                     </div>
-                    <button id="btn-apply-global-multi" class="w-full bg-pink-600 hover:bg-pink-500 text-white text-[10px] font-bold py-1.5 rounded mt-1">현재 설정된 모든 단계(대기목록)에 일괄 적용</button>
+                    <button id="btn-apply-global-multi" class="w-full bg-pink-600 hover:bg-pink-500 text-white text-[10px] font-bold py-1.5 rounded mt-1">현재 대기목록 전체에 규칙 혼합 적용</button>
                 </div>
             </div>
 
@@ -277,6 +309,7 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -290,7 +323,7 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v7'); // 클라우드 동기화 V7 버전
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v8');
 
         window.syncToCloud = async (stateObj) => {
             if(!window.isViewerMode && window.isFirebaseReady) {
@@ -299,16 +332,15 @@
         };
 
         signInAnonymously(auth).then(async () => {
-            // [어드민] 초기 로드 시 파이어베이스 캐시 조회 (있으면 병합, 없으면 로컬 스토리지/기본값)
             if (!window.isViewerMode) {
                 try {
                     const docSnap = await getDoc(window.stateDocRef);
                     if (docSnap.exists()) {
                         const cloudState = docSnap.data();
-                        if (cloudState.timer) cloudState.timer.isRunning = false; // 타이머는 로드시 자동 정지 상태 유지
+                        if (cloudState.timer) cloudState.timer.isRunning = false;
                         window.state = { ...window.state, ...cloudState };
                     } else {
-                        const saved = localStorage.getItem('sigHunterState_v7');
+                        const saved = localStorage.getItem('sigHunterState_v8');
                         if (saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                     }
                 } catch(e) { console.error("Cloud state load error", e); }
@@ -316,7 +348,6 @@
                 window.initAdminUI();
             }
 
-            // 원본 DB (시그니처 데이터) 실시간 연동 (N개 뱃지 표시)
             onSnapshot(doc(db, 'signature_boards', 'main_board_data'), (snapshot) => {
                 if (snapshot.exists() && snapshot.data().itemConfigs) {
                     window.firebaseItems = snapshot.data().itemConfigs; window.isFirebaseReady = true;
@@ -324,11 +355,11 @@
                     
                     if(!window.isViewerMode && window.state && window.state.currentBroadcastStageId) {
                         window.updateViewerStateOnly(); 
+                        if(!window.isViewerMode) window.renderAdminStages();
                     }
                 }
             });
 
-            // [뷰어] 원격 제어 수신
             if (window.isViewerMode) {
                 onSnapshot(window.stateDocRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -382,9 +413,6 @@
             m.classList.replace('hidden', 'flex');
         }
 
-        // ==========================================
-        // 프리셋(3).json 데이터를 기반으로 한 Default State
-        // ==========================================
         const DEFAULT_PRESET = {
             "cols": 5, "rows": 2, "bannerText": "시그헌터 목록 (별풍점수 2배)",
             "timer": { "remaining": 600, "isRunning": false, "targetEnd": null },
@@ -408,7 +436,7 @@
                 { "id": "st_15", "name": "15단계", "min": 15000, "max": 30000, "count": 10, "mandatory": "30000", "high": 0, "timerMin": 10, "timerSec": 0, "previewNumbers": [15000,17459,18530,20090,20771,25555,27771,29992,29999,30000], "broadcastNumbers": [15000] },
                 { "id": "st_16", "name": "16단계", "min": 20000, "max": 300000, "count": 10, "mandatory": "40000,50000,77771,77777,100000,200000,300000", "high": 0, "timerMin": 10, "timerSec": 0, "previewNumbers": [20774,40000,50000,57777,77771,77777,100000,107777,200000,300000], "broadcastNumbers": [] }
             ],
-            "gameMode": "hunter", // isHunterMode: true를 기반
+            "gameMode": "hunter",
             "members": [ "나래님", "예란", "츠밍", "짐광환", "지숙", "김봄비", "이밍", "지윤", "도예솔", "도화", "쿵쿵2" ],
             "eliminatedMembers": [],
             "multipliers": { "1000": 2, "1001": 1, "1002": 1, "1005": 1, "1006": 1, "1008": 3, "1009": 2, "1011": 1, "1012": 1, "1014": 1, "1044": 1, "1065": 1, "1082": 1, "1088": 1, "1100": 1, "1102": 3, "1111": 1, "1115": 1, "1142": 5, "1152": 1, "1182": 1, "1212": 1, "1245": 1, "1252": 1, "1279": 1, "1288": 4, "1295": 1, "1297": 1, "1298": 1, "1299": 1, "1300": 1, "1310": 1, "1313": 1, "1350": 1, "1360": 5, "1370": 1, "1378": 1, "1400": 1, "1412": 1, "1425": 1, "1444": 1, "1450": 1, "1486": 1, "1500": 1, "1520": 1, "1524": 1, "1550": 1, "1555": 1, "1570": 1, "1580": 1, "1599": 1, "1600": 1, "1620": 1, "1666": 1, "1717": 1, "1750": 1, "1771": 1, "1777": 1, "1788": 1, "1800": 1, "1805": 1, "1818": 1, "1820": 1, "1850": 1, "1852": 1, "1859": 1, "1888": 1, "1900": 1, "1919": 1, "1920": 1, "1925": 1, "1950": 1, "1972": 1, "1980": 1, "1999": 1, "2004": 1, "2008": 1, "2010": 1, "2040": 1, "2060": 1, "2070": 1, "2080": 1, "2099": 1, "2100": 1, "2115": 1, "2152": 1, "2155": 1, "2200": 1, "2201": 1, "2222": 1, "2225": 1, "2242": 1, "2310": 1, "2333": 1, "2345": 1, "2350": 1, "2400": 1, "2401": 1, "2403": 1, "2404": 1, "2424": 1, "2444": 1, "2450": 1, "2500": 1, "2555": 1, "2558": 1, "2600": 1, "2626": 1, "2655": 1, "2700": 1, "2749": 1, "2754": 1, "2771": 1, "2799": 1, "2800": 1, "2820": 1, "2828": 1, "2900": 1, "3000": 1, "3001": 1, "3003": 1, "3010": 1, "3015": 1, "3020": 1, "3025": 1, "3030": 1, "3037": 1, "3066": 1, "3069": 1, "3111": 1, "3121": 1, "3124": 1, "3180": 1, "3200": 1, "3222": 1, "3225": 1, "3300": 1, "3425": 1, "3500": 1, "3555": 1, "3669": 1, "3777": 1, "3888": 1, "3892": 1, "3988": 1, "4000": 1, "4001": 1, "4400": 1, "4444": 1, "4555": 1, "4777": 1, "4818": 1, "4848": 1, "4860": 1, "4892": 1, "5000": 1, "5037": 1, "5050": 1, "5112": 1, "5121": 1, "5279": 1, "5337": 1, "5382": 1, "5432": 1, "5550": 1, "5555": 1, "5656": 1, "5757": 1, "5800": 1, "5882": 1, "5959": 1, "5999": 1, "6000": 1, "6666": 1, "6767": 1, "6868": 1, "6969": 1, "6974": 1, "7000": 1, "7272": 1, "7575": 1, "7666": 1, "7777": 1, "8000": 1, "8282": 1, "8337": 1, "8484": 1, "8888": 1, "9000": 1, "9500": 1, "9820": 1, "9999": 1, "10000": 1, "10001": 1, "10002": 1, "10004": 1, "10014": 1, "10020": 1, "10023": 1, "10024": 1, "10030": 1, "10042": 1, "10044": 1, "10047": 1, "10050": 1, "10051": 1, "10052": 1, "10059": 1, "10064": 1, "10066": 1, "10071": 1, "10077": 1, "10082": 1, "10087": 1, "10088": 1, "10090": 1, "10094": 1, "10099": 1, "10108": 1, "10125": 1, "10130": 1, "10182": 1, "10257": 1, "10288": 1, "10325": 1, "10505": 1, "10674": 1, "10707": 1, "10756": 1, "10774": 1, "10777": 1, "10804": 1, "10823": 1, "10824": 1, "10892": 1, "10911": 1, "10928": 1, "10999": 1, "11004": 1, "11013": 1, "11111": 1, "11112": 1, "11187": 1, "11582": 1, "11771": 1, "11777": 1, "11811": 1, "11900": 1, "11911": 1, "11999": 1, "12121": 1, "12171": 1, "12222": 1, "12223": 1, "12250": 1, "12288": 1, "12321": 1, "12333": 1, "12337": 1, "12345": 1, "12382": 1, "12476": 1, "12484": 1, "12486": 1, "12525": 1, "12550": 1, "12555": 1, "12565": 1, "12582": 1, "12588": 1, "12745": 1, "12777": 1, "12779": 1, "13333": 1, "13771": 1, "14240": 1, "14475": 1, "14771": 1, "15000": 1, "16666": 1, "17459": 1, "17777": 1, "18530": 1, "20000": 1, "20090": 1, "20771": 1, "20774": 1, "20777": 1, "25555": 1, "27771": 1, "27777": 1, "29992": 1, "29999": 1, "30000": 1, "40000": 1, "50000": 1, "57777": 1, "77771": 1, "77777": 1, "100000": 1, "100021": 1, "107777": 1, "200000": 1, "300000": 1 },
@@ -422,7 +450,6 @@
             memberList: document.getElementById('member-list')
         };
 
-        // 관리자 UI 초기화 전용 함수 (중복 렌더링 방지)
         window.initAdminUI = function() {
             DOM.inCols.value = state.cols; DOM.inRows.value = state.rows; DOM.inBanner.value = state.bannerText;
             const modeRadio = document.querySelector(`input[name="gameMode"][value="${state.gameMode}"]`);
@@ -430,7 +457,6 @@
             updateModeIndicator(); renderMembers(); renderAdminStages();
             window.updateViewerVisibilityUI();
             
-            // 만약 현재 송출중인 화면이 있다면 즉시 뷰어 상태 동기화
             if (state.currentBroadcastStageId) {
                 window.updateViewerStateOnly();
             } else {
@@ -442,29 +468,40 @@
 
         function saveState() {
             if (window.isViewerMode) return;
-            localStorage.setItem('sigHunterState_v7', JSON.stringify(state)); // 로컬 백업 유지
-            if(window.syncToCloud) window.syncToCloud(state); // 파이어베이스 캐시 연동
+            localStorage.setItem('sigHunterState_v8', JSON.stringify(state)); 
+            if(window.syncToCloud) window.syncToCloud(state); 
         }
 
-        // --- 뷰어 숨기기 컨트롤러 ---
+        // --- 뷰어 숨기기 ---
         window.updateViewerVisibilityUI = function() {
             const vc = document.getElementById('viewer-container');
+            const adminWarning = document.getElementById('admin-viewer-hidden-warning');
             if (state.isViewerHidden) {
-                vc.style.visibility = 'hidden'; 
-                if(!window.isViewerMode) document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 표시하기';
+                if(window.isViewerMode) {
+                    vc.style.opacity = '0'; // OBS 화면 완전히 투명화
+                } else {
+                    vc.style.opacity = '1';
+                    adminWarning.classList.replace('hidden', 'flex'); // 관리자 패널 경고창
+                    document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 표시하기';
+                    document.getElementById('btn-toggle-viewer').classList.replace('bg-yellow-500', 'bg-red-500');
+                    document.getElementById('btn-toggle-viewer').classList.replace('hover:bg-yellow-400', 'hover:bg-red-400');
+                }
             } else {
-                vc.style.visibility = 'visible';
-                if(!window.isViewerMode) document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 숨기기';
+                vc.style.opacity = '1';
+                if(!window.isViewerMode) {
+                    adminWarning.classList.replace('flex', 'hidden');
+                    document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 숨기기';
+                    document.getElementById('btn-toggle-viewer').classList.replace('bg-red-500', 'bg-yellow-500');
+                    document.getElementById('btn-toggle-viewer').classList.replace('hover:bg-red-400', 'hover:bg-yellow-400');
+                }
             }
         }
 
-        // --- 부가기능 (기록 저장, 중복확인, 프리셋) ---
         if(!window.isViewerMode) {
             document.getElementById('btn-toggle-viewer').addEventListener('click', () => {
                 state.isViewerHidden = !state.isViewerHidden; saveState(); window.updateViewerVisibilityUI();
             });
 
-            // 설정값 초기화 버튼
             document.getElementById('new-game-btn').addEventListener('click', () => {
                 showModal("솔드아웃 및 획득 기록을 포함한 전체 진행 상태를 리셋하시겠습니까?", true, () => {
                     state.globalSoldOutList = []; state.claimedCards = {}; state.revealedCards = []; state.currentBroadcastStageId = null;
@@ -513,11 +550,9 @@
                         showModal("✅ 파일을 불러와 설정 및 클라우드 동기화가 완료되었습니다.");
                     } catch(err) { showModal("올바른 JSON 파일이 아닙니다."); } 
                 }; 
-                r.readAsText(f);
-                e.target.value = '';
+                r.readAsText(f); e.target.value = '';
             });
 
-            // 화면 배열 동기화 강제 렌더링
             document.getElementById('btn-apply-layout').addEventListener('click', () => {
                 state.cols = DOM.inCols.value; state.rows = DOM.inRows.value; state.bannerText = DOM.inBanner.value;
                 saveState(); 
@@ -541,18 +576,18 @@
             });
 
             document.getElementById('btn-apply-global-multi').addEventListener('click', () => {
-                const isExact = document.getElementById('rule-exact').checked;
-                state.stages.forEach(stage => applyMultiplierRule(stage, isExact));
+                state.stages.forEach(stage => applyMultiplierRule(stage));
                 saveState(); renderAdminStages(); showModal("모든 대기목록에 배수 규칙이 일괄 적용되었습니다.\n크게보기/설정 창에서 확인 가능합니다.");
             });
         }
 
-        // 배너 텍스트 업데이트 헬퍼 (단계 강조)
+        // 배너 텍스트 업데이트 (단계 강조 축소)
         window.updateBannerUI = function() {
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
             const textSpan = `<span>${state.bannerText}</span>`;
             if (stage) {
-                document.getElementById('banner-text').innerHTML = `<span class="text-white bg-red-600 px-5 py-1.5 rounded-2xl mr-4 border-4 border-red-800 shadow-xl inline-block -translate-y-1">[ ${stage.name} ]</span>${textSpan}`;
+                // 강조 태그의 사이즈와 두께를 조정
+                document.getElementById('banner-text').innerHTML = `<span class="text-white bg-red-600 px-3 py-1 rounded-xl mr-3 border-2 border-red-800 shadow-md inline-block text-3xl align-middle -translate-y-1">[ ${stage.name} ]</span>${textSpan}`;
             } else {
                 document.getElementById('banner-text').innerHTML = textSpan;
             }
@@ -582,7 +617,7 @@
         window.removeMember = (m) => { state.members = state.members.filter(x => x !== m); state.eliminatedMembers = state.eliminatedMembers.filter(x => x !== m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
         window.toggleSurvival = (m) => { if(state.eliminatedMembers.includes(m)) state.eliminatedMembers = state.eliminatedMembers.filter(x=>x!==m); else state.eliminatedMembers.push(m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
 
-        // --- 관리자 단계 렌더링 ---
+        // --- 관리자 단계 렌더링 (대기목록 상세 내역 추가) ---
         function renderAdminStages() {
             if(window.isViewerMode) return;
             const container = document.getElementById('stages-container'); container.innerHTML = '';
@@ -591,6 +626,21 @@
                 const div = document.createElement('div');
                 div.className = `bg-slate-800 p-3 rounded-lg border ${isBroadcasting ? 'border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'border-slate-700'} relative transition-all`;
                 
+                // 대기목록 상세 태그 생성
+                const previewTags = stage.previewNumbers.length > 0 
+                    ? stage.previewNumbers.map(n => {
+                        const multi = state.multipliers[n] || 1;
+                        const fbItem = window.firebaseItems.find(i => i.id === n);
+                        const name = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름없음';
+                        return `
+                            <div class="bg-slate-700 border border-slate-600 rounded px-1.5 py-1 flex justify-between items-center gap-1">
+                                <span class="text-yellow-300 font-bold whitespace-nowrap">${n}</span>
+                                <span class="text-slate-300 truncate w-14 text-[9px]">${name}</span>
+                                <span class="text-pink-400 font-bold whitespace-nowrap">${multi}배</span>
+                            </div>`;
+                    }).join('') 
+                    : '<div class="text-slate-500 font-bold px-1 py-0.5 col-span-2">대기목록 없음</div>';
+
                 div.innerHTML = `
                     <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 cursor-move handle">
                         <div class="flex items-center gap-2 w-full">
@@ -607,14 +657,23 @@
                         <div class="flex flex-col"><span class="text-[9px] text-emerald-400">분</span><input type="number" class="admin-input px-0" value="${stage.timerMin}" onchange="updateStageData('${stage.id}','tmin',this.value)"></div>
                         <div class="flex flex-col"><span class="text-[9px] text-emerald-400">초</span><input type="number" class="admin-input px-0" value="${stage.timerSec}" onchange="updateStageData('${stage.id}','tsec',this.value)"></div>
                     </div>
+                    
+                    <div class="bg-slate-900 p-2 rounded border border-slate-700 mb-2">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] text-slate-400">대기목록 상세 (총 ${stage.previewNumbers.length}개)</span>
+                            <button class="bg-indigo-600 text-white text-[9px] font-bold px-2 py-1 rounded shadow hover:bg-indigo-500 whitespace-nowrap" onclick="openPreviewPopup('${stage.id}')">🔍 크게보기/수동설정</button>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1 mt-1 text-[10px] max-h-24 overflow-y-auto custom-scroll pr-1">
+                            ${previewTags}
+                        </div>
+                    </div>
+
                     <div class="flex gap-2 items-center mb-2">
                         <input type="text" class="admin-input flex-1 text-left px-2 text-[10px]" value="${stage.mandatory}" onchange="updateStageData('${stage.id}','mand',this.value)" placeholder="필수번호(쉼표구분)">
-                        <button class="bg-indigo-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow hover:bg-indigo-500 whitespace-nowrap" onclick="openPreviewPopup('${stage.id}')">🔍 크게보기/설정</button>
+                        <button class="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold py-1.5 px-3 rounded shadow whitespace-nowrap" onclick="executeStageRandom('${stage.id}')">🎲 목록 및 배수 뽑기</button>
                     </div>
-                    <div class="flex gap-2">
-                        <button class="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold py-1.5 w-16 rounded shadow" onclick="executeStageRandom('${stage.id}')">🎲 뽑기</button>
-                        <button class="flex-1 bg-red-600 hover:bg-red-500 text-white text-xs font-black py-1.5 rounded shadow flex justify-center gap-1" onclick="triggerBroadcast('${stage.id}')">▶ 화면에 송출 (적용)</button>
-                    </div>
+                    
+                    <button class="w-full bg-red-600 hover:bg-red-500 text-white text-xs font-black py-2 rounded shadow flex justify-center gap-1" onclick="triggerBroadcast('${stage.id}')">▶ 화면에 송출 (적용)</button>
                 `;
                 container.appendChild(div);
             });
@@ -629,24 +688,32 @@
             saveState();
         };
 
-        // --- 랜덤 뽑기 및 배수 규칙 적용 ---
-        function applyMultiplierRule(stage, isExact) {
+        // --- 랜덤 뽑기 및 배수 규칙 동시 적용 ---
+        function applyMultiplierRule(stage) {
             if(stage.previewNumbers.length === 0) return;
-            if(isExact) {
-                const ruleStr = document.getElementById('multi-exact-str').value;
-                let multiPool = [];
+            
+            let multiPool = [];
+            const ruleStr = document.getElementById('multi-exact-str').value;
+            
+            // 1. 특정 배수 할당 적용
+            if(ruleStr.trim()) {
                 ruleStr.split(',').forEach(part => {
                     const [multi, count] = part.split(':').map(n => parseInt(n.trim()));
                     if(!isNaN(multi) && !isNaN(count)) for(let i=0; i<count; i++) multiPool.push(multi);
                 });
-                while(multiPool.length < stage.previewNumbers.length) multiPool.push(1);
-                multiPool.sort(() => Math.random() - 0.5);
-                stage.previewNumbers.forEach((n, i) => state.multipliers[n] = multiPool[i] || 1);
-            } else {
-                const min = parseInt(document.getElementById('multi-min').value) || 1;
-                const max = parseInt(document.getElementById('multi-max').value) || 1;
-                stage.previewNumbers.forEach(n => { state.multipliers[n] = Math.floor(Math.random() * (max - min + 1)) + min; });
             }
+            
+            const min = parseInt(document.getElementById('multi-min').value) || 1;
+            const max = parseInt(document.getElementById('multi-max').value) || 1;
+            
+            // 2. 남은 자리를 랜덤 범위로 채우기
+            while(multiPool.length < stage.previewNumbers.length) {
+                multiPool.push(Math.floor(Math.random() * (max - min + 1)) + min);
+            }
+            
+            // 섞기
+            multiPool.sort(() => Math.random() - 0.5);
+            stage.previewNumbers.forEach((n, i) => state.multipliers[n] = multiPool[i] || 1);
         }
 
         window.executeStageRandom = (id) => {
@@ -665,10 +732,9 @@
             
             stage.previewNumbers = [...new Set(drawn)].sort((a,b)=>a-b);
             
-            if(document.getElementById('rule-exact')) {
-                const isExact = document.getElementById('rule-exact').checked;
-                applyMultiplierRule(stage, isExact);
-            }
+            // 룰 기반 배수 자동 적용
+            applyMultiplierRule(stage);
+            
             saveState(); renderAdminStages();
         }
 
@@ -679,7 +745,7 @@
             });
         }
 
-        // --- 미리보기(크게보기) ---
+        // --- 크게보기 설정 팝업 ---
         let currentPreviewStageId = null;
         window.openPreviewPopup = (id) => {
             const stage = state.stages.find(s => s.id === id); if(!stage) return;
@@ -723,7 +789,7 @@
                     </div>`;
             });
         }
-        window.updateMultiplier = (num, val) => { state.multipliers[num] = parseInt(val)||1; saveState(); };
+        window.updateMultiplier = (num, val) => { state.multipliers[num] = parseInt(val)||1; saveState(); renderAdminStages(); };
 
         // --- 송출 렌더링 ---
         window.triggerBroadcast = (id) => {
@@ -807,7 +873,7 @@
             window.updateViewerVisibilityUI();
         }
 
-        // --- 상태 변화 실시간 렌더링 ---
+        // --- 실시간 렌더링 (깜빡임 최소화) ---
         window.updateViewerStateOnly = function() {
             if(!state.currentBroadcastStageId) return;
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
@@ -839,16 +905,63 @@
             document.getElementById('progress-text').innerText = `${soldCount} / ${total}`; 
             document.getElementById('progress-bar').style.width = `${percent}%`;
             if(percent >= 80 && percent < 100) pw.classList.add('warning-active'); else pw.classList.remove('warning-active');
-            if(percent === 100 && total > 0) document.getElementById('stage-clear-overlay').classList.add('show'); else document.getElementById('stage-clear-overlay').classList.remove('show');
+            
+            // STAGE CLEAR는 일반 모드에서만 100%일 때 출력
+            if(state.gameMode === 'standard' && percent === 100 && total > 0) {
+                document.getElementById('stage-clear-overlay').classList.add('show'); 
+            } else { 
+                document.getElementById('stage-clear-overlay').classList.remove('show'); 
+            }
 
+            // 생존게임 전광판 업데이트 (박스형, 적을 땐 중앙 고정)
             if(state.gameMode === 'survival') {
                 const claimedNames = Object.values(state.claimedCards);
                 const survivors = state.members.filter(m => !state.eliminatedMembers.includes(m) && !claimedNames.includes(m));
-                document.getElementById('marquee-text').innerText = survivors.length > 0 ? survivors.join(' 🏃‍♂️ ') : '남은 도전자 없음';
+                
+                const marqueeContainer = document.getElementById('marquee-container');
+                const marqueeText = document.getElementById('marquee-text');
+
+                if(survivors.length === 0) {
+                    marqueeText.innerHTML = '남은 도전자 없음';
+                    marqueeText.classList.remove('animate');
+                    marqueeContainer.classList.add('center-mode');
+                } else {
+                    marqueeText.innerHTML = survivors.map(m => `<span class="inline-block bg-slate-800 border-2 border-yellow-400 text-yellow-300 px-4 py-1.5 rounded-xl shadow-[0_0_10px_rgba(250,204,21,0.6)] animate-pulse">${m}</span>`).join('');
+                    
+                    if(survivors.length <= 5) {
+                        marqueeText.classList.remove('animate');
+                        marqueeContainer.classList.add('center-mode');
+                    } else {
+                        marqueeText.classList.add('animate');
+                        marqueeContainer.classList.remove('center-mode');
+                    }
+                }
+            }
+
+            // 관리자 패널의 Undo(솔드아웃 복구) 리스트 갱신
+            if(!window.isViewerMode) {
+                const ul = document.getElementById('undo-list-container'); ul.innerHTML = '';
+                document.getElementById('undo-count').innerText = `${soldCount}개 기록됨`;
+                if(soldCount === 0) ul.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">판매 기록이 없습니다.</div>';
+                else {
+                    stage.broadcastNumbers.filter(n => state.globalSoldOutList.includes(n) || state.claimedCards[n]).forEach(num => {
+                        const claimTxt = state.claimedCards[num] ? `<span class="text-blue-400">(${state.claimedCards[num]})</span>` : '';
+                        const btn = document.createElement('button');
+                        btn.className = "bg-slate-800 hover:bg-red-800 border border-slate-600 text-white text-[11px] px-2 py-1.5 rounded flex items-center gap-1 transition group";
+                        btn.innerHTML = `<span class="text-red-400 group-hover:text-white">↺ 복구</span> <span class="font-bold ml-1">${num}</span> ${claimTxt}`;
+                        btn.onclick = () => { 
+                            state.globalSoldOutList = state.globalSoldOutList.filter(n=>n!==num); 
+                            delete state.claimedCards[num]; 
+                            state.revealedCards = state.revealedCards.filter(n=>n!==num);
+                            saveState(); window.updateViewerStateOnly(); 
+                        };
+                        ul.appendChild(btn);
+                    });
+                }
             }
         }
 
-        // --- 클릭 사이클 제어 ---
+        // --- 클릭 제어 ---
         let pendingClaimNum = null; 
         function handleCardClick(num, wrapperElement) {
             const isSold = state.globalSoldOutList.includes(num); 
