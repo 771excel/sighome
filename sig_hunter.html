@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V9)</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V10)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -17,14 +17,13 @@
         body.viewer-mode #admin-panel { display: none !important; }
         body.viewer-mode #viewer-container { width: 100vw !important; max-width: 100vw !important; padding: 2rem !important; }
 
-        /* 로그 뷰어 모드 스타일 */
         body.log-mode #admin-panel, body.log-mode #viewer-container { display: none !important; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 
-        .glass-panel { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .glass-panel { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         
         #card-grid {
             display: grid; grid-template-columns: repeat(var(--grid-cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
@@ -39,25 +38,31 @@
         .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
-        /* 이미지 비율 16:9 고정 및 텍스트 2줄 꽉참 처리 */
-        .img-container { width: 100%; aspect-ratio: 16/9; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 2px solid #e2e8f0; }
-        .text-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem; overflow: hidden; }
+        .img-container { width: 100%; aspect-ratio: 16/9; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 3px solid #cbd5e1; }
+        .text-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem 0.8rem; overflow: hidden; width: 100%; }
         
-        .sig-id { font-size: clamp(14px, calc(100vh / var(--grid-rows) * 0.05), 26px); margin-bottom: 2px; line-height: 1; font-weight: 900; }
-        .sig-name { 
-            font-size: clamp(16px, calc(100vh / var(--grid-rows) * 0.08), 34px); 
-            line-height: 1.2; width: 100%; text-align: center; font-weight: 800;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; 
-            overflow: hidden; text-overflow: ellipsis; word-break: keep-all; white-space: normal;
+        /* 텍스트 크기 조정 및 슬라이딩 처리 */
+        .sig-id { font-size: clamp(24px, calc(100vh / var(--grid-rows) * 0.12), 48px); margin-bottom: 2px; line-height: 1; font-weight: 900; color: #dc2626; text-shadow: 1px 1px 0px rgba(0,0,0,0.1); }
+        
+        .sig-name-container { container-type: inline-size; width: 100%; overflow: hidden; white-space: nowrap; display: flex; justify-content: center; align-items: center; }
+        .sig-name-text { 
+            font-size: clamp(16px, calc(100vh / var(--grid-rows) * 0.075), 32px); 
+            line-height: 1.2; font-weight: 900; display: inline-block; color: #1e293b; letter-spacing: -0.5px;
+        }
+        .sig-name-text.is-scrolling { animation: scroll-text 4s linear infinite alternate; }
+        @keyframes scroll-text {
+            0%, 15% { transform: translateX(0); }
+            85%, 100% { transform: translateX(calc(100cqi - 100%)); }
         }
 
         .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
         @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 30px rgba(251, 191, 36, 1); } }
 
         .card-wrapper.is-sold-out .card-front img { filter: grayscale(100%) brightness(0.4); }
-        .card-wrapper.is-sold-out .text-container { background-color: #334155; color: #94a3b8; }
+        .card-wrapper.is-sold-out .text-container { background-color: #334155; }
+        .card-wrapper.is-sold-out .sig-id { color: #94a3b8; }
+        .card-wrapper.is-sold-out .sig-name-text { color: #cbd5e1; }
         
-        /* 솔드아웃 한줄 꽉차게 수정 */
         .sold-out-stamp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg); background: rgba(220, 38, 38, 0.95); color: white; font-size: 3rem; font-weight: 900; padding: 0.5rem 2rem; border-radius: 0.5rem; border: 4px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.6); opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20; white-space: nowrap; text-align: center; }
         .card-wrapper.is-sold-out .sold-out-stamp { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-5deg); }
 
@@ -69,7 +74,6 @@
         .card-wrapper.is-claimed .claimed-overlay { opacity: 1; }
         .claimed-badge { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 3px solid white; padding: 8px 30px; border-radius: 30px; font-weight: 900; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-size: 2.2rem; text-align: center; margin-bottom: 15px; }
         
-        /* 배수 표시 리디자인 */
         .multiplier-stamp { font-size: 5.5rem; font-weight: 900; color: #ffeb3b; text-shadow: 3px 3px 0 #d94a00, -3px -3px 0 #d94a00, 3px -3px 0 #d94a00, -3px 3px 0 #d94a00, 0 10px 20px rgba(0,0,0,0.8); filter: drop-shadow(0 0 10px rgba(255, 235, 59, 0.4)); transform: scale(0) rotate(-20deg); opacity: 0; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         .card-wrapper.is-revealed .multiplier-stamp { transform: scale(1) rotate(-10deg); opacity: 1; }
 
@@ -78,9 +82,10 @@
         #stage-clear-overlay { opacity: 0; pointer-events: none; transform: scale(0.9); transition: all 0.8s; }
         #stage-clear-overlay.show { opacity: 1; transform: scale(1); pointer-events: auto; }
 
+        /* 생존게임 전광판 개선 */
         .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; }
         .marquee-container.center-mode { justify-content: center; }
-        .marquee-content { display: flex; align-items: center; gap: 1rem; }
+        .marquee-content { display: flex; align-items: center; gap: 1.5rem; }
         .marquee-content.animate { animation: marquee 15s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
@@ -94,7 +99,7 @@
 
     <div id="log-container" class="w-full h-full bg-slate-900 text-slate-200 overflow-y-auto hidden">
         <div class="max-w-5xl mx-auto p-8">
-            <h1 class="text-3xl font-black text-white mb-2 flex items-center gap-3"><i class="ph-fill ph-list-magnifying-glass text-blue-500"></i> 실시간 방송 로그 뷰어</h1>
+            <h1 class="text-3xl font-black text-white mb-2 flex items-center gap-3">📝 실시간 방송 로그 뷰어</h1>
             <p class="text-slate-400 mb-8 font-bold">진행된 솔드아웃, 배수, 멤버 획득 내역이 시간순으로 표시됩니다.</p>
             
             <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
@@ -119,33 +124,34 @@
     <div id="viewer-container" class="flex-1 relative flex flex-col justify-between gap-4 p-6 overflow-hidden transition-all duration-300">
         
         <div id="admin-viewer-hidden-warning" class="absolute inset-0 bg-black/60 z-[100] hidden flex-col items-center justify-center backdrop-blur-sm pointer-events-none">
-            <i class="ph-fill ph-eye-slash text-6xl text-red-500 mb-4 animate-pulse"></i>
+            <div class="text-6xl text-red-500 mb-4 animate-pulse">👁️‍🗨️</div>
             <div class="bg-red-600 text-white font-black px-8 py-4 rounded-2xl text-2xl shadow-2xl border-4 border-red-800 text-center">
                 🚨 현재 OBS 송출 화면이 숨김 처리 되었습니다!<br>
                 <span class="text-sm font-bold text-red-200 mt-2 block">관리자 패널에서는 화면이 계속 보이지만, 뷰어(OBS)에서는 투명하게 사라집니다.</span>
             </div>
         </div>
 
-        <div class="flex justify-between items-stretch z-10 w-full mx-auto h-[80px]">
-            <div id="progress-wrapper" class="glass-panel p-4 rounded-xl w-[400px] flex flex-col justify-center shadow-xl transition-all h-full">
+        <div class="flex justify-between items-stretch z-10 w-full mx-auto h-[85px]">
+            <div id="progress-wrapper" class="glass-panel p-5 rounded-2xl w-[420px] flex flex-col justify-center transition-all h-full">
                 <div class="flex justify-between items-end mb-2">
-                    <span class="text-white font-bold text-lg tracking-wide">현재 단계 진행률</span>
-                    <span id="progress-text" class="text-yellow-400 font-black text-2xl leading-none">0 / 0</span>
+                    <span class="text-white font-black text-xl tracking-wide">현재 진행률</span>
+                    <span id="progress-text" class="text-yellow-400 font-black text-3xl leading-none">0 / 0</span>
                 </div>
-                <div class="w-full bg-slate-700 rounded-full h-4 overflow-hidden border border-slate-600">
+                <div class="w-full bg-slate-700 rounded-full h-4 overflow-hidden border border-slate-500">
                     <div id="progress-bar" class="bg-gradient-to-r from-green-400 to-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
                 </div>
             </div>
 
-            <div id="survival-marquee-wrapper" class="glass-panel p-4 rounded-xl w-[800px] hidden flex-col justify-center shadow-xl border-yellow-500/50 h-full overflow-hidden">
-                <div class="text-white font-bold text-sm mb-1 text-center text-yellow-400 tracking-widest">🔥 생존 게임 - 현재 도전 중인 멤버 🔥</div>
-                <div id="marquee-container" class="marquee-container flex-1">
-                    <div id="marquee-text" class="marquee-content"></div>
+            <!-- 생존게임 전광판 개선: 좌측 텍스트 고정, 우측 마키 -->
+            <div id="survival-marquee-wrapper" class="glass-panel px-6 py-4 rounded-2xl w-[900px] hidden flex-row items-center gap-6 transition-all border-yellow-500/50 h-full overflow-hidden">
+                <div class="text-yellow-400 font-black text-2xl tracking-widest shrink-0 border-r-2 border-yellow-600/50 pr-6">도전 멤버</div>
+                <div id="marquee-container" class="marquee-container flex-1 h-full">
+                    <div id="marquee-text" class="marquee-content h-full"></div>
                 </div>
             </div>
 
-            <div id="viewer-timer-box" class="glass-panel px-8 rounded-xl hidden shadow-xl border-2 border-slate-600 transition-colors h-full flex items-center justify-center">
-                <span id="viewer-timer" class="text-white font-mono text-6xl font-black tracking-wider drop-shadow-md">10:00</span>
+            <div id="viewer-timer-box" class="glass-panel px-10 rounded-2xl hidden transition-colors h-full flex items-center justify-center">
+                <span id="viewer-timer" class="text-white font-mono text-6xl font-black tracking-wider drop-shadow-lg">10:00</span>
             </div>
         </div>
 
@@ -153,9 +159,9 @@
             <div id="card-grid" class="w-full h-full perspective-1000"></div>
             
             <div id="empty-state-msg" class="absolute inset-0 flex items-center justify-center">
-                <div class="glass-panel px-12 py-10 rounded-2xl border-4 border-dashed border-slate-500 text-center shadow-2xl">
-                    <h2 class="text-4xl font-bold text-white mb-3 tracking-widest">방송 준비중</h2>
-                    <p class="text-slate-400 text-lg">관리자 패널에서 설정을 마치고 송출을 시작해주세요.</p>
+                <div class="glass-panel px-12 py-10 rounded-3xl border-4 border-dashed border-slate-500 text-center shadow-2xl">
+                    <h2 class="text-5xl font-black text-white mb-4 tracking-widest">방송 준비중</h2>
+                    <p class="text-slate-400 text-xl font-bold">관리자 패널에서 설정을 마치고 송출을 시작해주세요.</p>
                 </div>
             </div>
             
@@ -168,14 +174,15 @@
         </div>
 
         <div id="banner-wrapper" class="hidden w-full mx-auto z-10 shrink-0">
-            <div class="bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 text-black text-center text-[2.5rem] font-black py-4 rounded-xl shadow-[0_0_20px_rgba(250,204,21,0.5)] border-b-8 border-yellow-700 flex items-center justify-center">
+            <div class="bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 text-black text-center text-[2.5rem] font-black py-4 rounded-2xl shadow-[0_0_20px_rgba(250,204,21,0.5)] border-b-8 border-yellow-700 flex items-center justify-center">
                 <span id="banner-text">시그헌터 목록</span>
             </div>
         </div>
     </div>
 
 
-    <div id="admin-panel" class="w-[550px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
+    <!-- [우측] 관리자 패널 -->
+    <div id="admin-panel" class="w-[580px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
             <div class="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-sm w-full shadow-2xl text-center mx-4">
@@ -188,7 +195,7 @@
             <div class="bg-slate-800 border-2 border-blue-500 rounded-xl p-6 max-w-sm w-full shadow-[0_0_30px_rgba(59,130,246,0.3)] mx-4">
                 <h3 class="text-white text-lg font-black mb-4 text-center">🎯 대상 멤버 선택</h3>
                 <div id="member-btn-list" class="flex flex-wrap gap-2 justify-center max-h-[300px] overflow-y-auto mb-4"></div>
-                <button onclick="closeMemberModal()" class="w-full py-2 bg-slate-600 text-white rounded font-bold text-sm hover:bg-slate-500 transition">취소</button>
+                <button onclick="closeMemberModal()" class="w-full py-2 bg-slate-600 text-white rounded font-bold text-sm hover:bg-slate-500 transition mt-2">선택 취소</button>
             </div>
         </div>
 
@@ -286,13 +293,14 @@
                 </div>
             </div>
 
+            <!-- 복구 (Undo) -->
             <div class="bg-slate-800 p-4 rounded-xl border border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)] relative overflow-hidden">
                 <div class="absolute inset-0 bg-red-900/10 pointer-events-none"></div>
                 <div class="flex justify-between items-center mb-2 relative z-10">
                     <label class="block text-sm font-black text-red-400">↩️ 잘못 클릭한 번호 즉시 복구</label>
                     <span id="undo-count" class="text-[11px] text-red-300 font-bold bg-slate-900 px-2 py-0.5 rounded border border-red-800">0개 기록됨</span>
                 </div>
-                <p class="text-[10px] text-slate-400 mb-3 relative z-10 leading-tight">송출 중인 화면에서 잘못 클릭된 카드를 누르면 즉시 이전 상태로 되돌립니다.</p>
+                <p class="text-[10px] text-slate-400 mb-3 relative z-10 leading-tight">송출 중인 화면에서 잘못 클릭된 카드를 복구버튼을 누르면 즉시 되돌립니다. (로그에도 반영)</p>
                 <div id="undo-list-container" class="flex flex-col gap-1.5 min-h-[40px] max-h-[120px] overflow-y-auto bg-slate-900 p-2 rounded border border-slate-700 custom-scroll relative z-10">
                     <div class="text-xs text-slate-600 w-full text-center py-2">판매/획득 기록이 없습니다.</div>
                 </div>
@@ -309,8 +317,8 @@
             </div>
 
             <div class="bg-slate-800 p-3 rounded-xl border border-pink-500/50 shadow-sm">
-                <label class="block text-xs font-bold text-pink-400 mb-2">🎲 랜덤 배수 분배 규칙 (동시 적용 가능)</label>
-                <div class="bg-slate-900 p-2 rounded border border-slate-700 flex flex-col gap-3">
+                <label class="block text-xs font-bold text-pink-400 mb-2">🎲 배수 분배 규칙 (동시 적용 가능)</label>
+                <div class="bg-slate-900 p-3 rounded border border-slate-700 flex flex-col gap-3">
                     <div class="flex flex-col border-b border-slate-700 pb-3">
                         <label class="text-[11px] text-slate-300 font-bold mb-1">1. 특정 배수 고정 개수 할당</label>
                         <input type="text" id="multi-exact-str" class="admin-input w-full text-[10px] py-1" placeholder="예: 3배:1, 2배:3 (입력 안하면 무시)">
@@ -318,21 +326,20 @@
                     <div class="flex flex-col mb-1">
                         <label class="flex items-center gap-2 cursor-pointer mb-2">
                             <input type="checkbox" id="use-random-rest" class="accent-pink-500 w-4 h-4">
-                            <span class="text-[11px] text-slate-300 font-bold">2. 나머지 카드 배수 랜덤 범위 적용 (비활성화 시 1배)</span>
+                            <span class="text-[11px] text-slate-300 font-bold">2. 나머지 카드 배수 랜덤 범위 적용 (체크 해제 시 모두 1배)</span>
                         </label>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 pl-6">
                             <span class="text-[10px] text-slate-400">최소</span><input type="number" id="multi-min" class="admin-input w-12 py-0.5 px-0" value="1">
                             <span class="text-[10px] text-slate-400">~ 최대</span><input type="number" id="multi-max" class="admin-input w-12 py-0.5 px-0" value="5">
                         </div>
                     </div>
-                    <button id="btn-apply-global-multi" class="w-full bg-pink-600 hover:bg-pink-500 text-white text-[10px] font-bold py-1.5 rounded mt-1">현재 설정된 모든 단계(대기목록)에 일괄 적용</button>
                 </div>
             </div>
 
             <div>
                 <div class="flex justify-between items-center mb-3 mt-4">
                     <label class="block text-sm font-bold text-indigo-300">🎲 단계별 설정 및 송출</label>
-                    <button id="btn-add-stage" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded shadow">➕ 추가</button>
+                    <button id="btn-add-stage" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded shadow">➕ 단계 추가</button>
                 </div>
                 <button id="batch-generate-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 mb-4 rounded-xl shadow border border-blue-400 text-sm">전체 단계 일괄 랜덤 생성 (중복 방지)</button>
                 <div id="stages-container" class="space-y-4 pb-20"></div>
@@ -340,6 +347,7 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -353,7 +361,7 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v9'); // V9
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v10'); // V10
 
         window.syncToCloud = async (stateObj) => {
             if(!window.isViewerMode && !window.isLogMode && window.isFirebaseReady) {
@@ -362,7 +370,6 @@
         };
 
         signInAnonymously(auth).then(async () => {
-            // [어드민] 초기 로드
             if (!window.isViewerMode && !window.isLogMode) {
                 try {
                     const docSnap = await getDoc(window.stateDocRef);
@@ -372,7 +379,7 @@
                         window.state = { ...window.state, ...cloudState };
                         if(!window.state.actionLogs) window.state.actionLogs = [];
                     } else {
-                        const saved = localStorage.getItem('sigHunterState_v9');
+                        const saved = localStorage.getItem('sigHunterState_v10');
                         if (saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                     }
                 } catch(e) { console.error("Cloud state load error", e); }
@@ -380,7 +387,6 @@
                 window.initAdminUI();
             }
 
-            // DB 시그니처 로드
             onSnapshot(doc(db, 'signature_boards', 'main_board_data'), (snapshot) => {
                 if (snapshot.exists() && snapshot.data().itemConfigs) {
                     window.firebaseItems = snapshot.data().itemConfigs; window.isFirebaseReady = true;
@@ -393,7 +399,6 @@
                 }
             });
 
-            // [뷰어 & 로그모드] 원격 제어 수신
             if (window.isViewerMode || window.isLogMode) {
                 onSnapshot(window.stateDocRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -515,14 +520,12 @@
 
         function saveState() {
             if (window.isViewerMode || window.isLogMode) return;
-            localStorage.setItem('sigHunterState_v9', JSON.stringify(state)); 
+            localStorage.setItem('sigHunterState_v10', JSON.stringify(state)); 
             if(window.syncToCloud) window.syncToCloud(state); 
         }
 
-        // --- 취소/복구 시 로그 상태 변경 ---
         function cancelLog(num) {
             if(!state.actionLogs) return;
-            // 가장 최근의 활성화된 해당 번호 로그를 찾아서 취소 처리
             for(let i = state.actionLogs.length - 1; i >= 0; i--) {
                 if(state.actionLogs[i].sigNum === num && state.actionLogs[i].status === 'active') {
                     state.actionLogs[i].status = 'canceled';
@@ -531,7 +534,6 @@
             }
         }
 
-        // --- 실시간 로그 뷰어 렌더링 ---
         window.renderLogViewer = function() {
             if(!window.isLogMode) return;
             const tbody = document.getElementById('log-tbody');
@@ -539,37 +541,35 @@
             tbody.innerHTML = '';
             
             if(!state.actionLogs || state.actionLogs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500 font-bold">기록된 이벤트가 없습니다.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500 font-bold text-xl">기록된 이벤트가 없습니다.</td></tr>';
                 return;
             }
 
-            // 최신 기록이 위로 오게 역순 출력
             [...state.actionLogs].reverse().forEach(log => {
                 const isCanceled = log.status === 'canceled';
                 const tr = document.createElement('tr');
                 tr.className = `border-b border-slate-700 ${isCanceled ? 'bg-slate-800/50 text-slate-500' : 'text-slate-200 hover:bg-slate-800/80 transition-colors'}`;
                 
                 tr.innerHTML = `
-                    <td class="p-4 ${isCanceled ? 'line-through' : ''}">${log.time}</td>
-                    <td class="p-4 font-bold ${isCanceled ? 'line-through' : 'text-emerald-400'}">${log.stageName}</td>
-                    <td class="p-4 font-black ${isCanceled ? 'text-slate-600 line-through' : 'text-yellow-400'}">${log.sigNum}</td>
-                    <td class="p-4 font-bold ${isCanceled ? 'text-slate-600 line-through' : 'text-blue-300'}">${log.member}</td>
-                    <td class="p-4 font-black text-lg ${isCanceled ? 'text-slate-600 line-through' : 'text-pink-400'}">${log.multi === '-' ? '-' : log.multi + '배'}</td>
-                    <td class="p-4 font-bold ${isCanceled ? 'text-red-500' : 'text-white'}">
-                        ${isCanceled ? '<span class="bg-red-500/20 px-2 py-1 rounded">취소/복구됨</span>' : '<span class="bg-blue-500/20 px-2 py-1 rounded">정상 획득</span>'}
+                    <td class="p-4 ${isCanceled ? 'line-through' : ''} text-lg">${log.time}</td>
+                    <td class="p-4 font-bold ${isCanceled ? 'line-through' : 'text-emerald-400'} text-lg">${log.stageName}</td>
+                    <td class="p-4 font-black ${isCanceled ? 'text-slate-600 line-through' : 'text-yellow-400'} text-xl">${log.sigNum}</td>
+                    <td class="p-4 font-bold ${isCanceled ? 'text-slate-600 line-through' : 'text-blue-300'} text-lg">${log.member}</td>
+                    <td class="p-4 font-black ${isCanceled ? 'text-slate-600 line-through' : 'text-pink-400'} text-2xl">${log.multi === '-' ? '-' : log.multi + '배'}</td>
+                    <td class="p-4 font-bold ${isCanceled ? 'text-red-500' : 'text-white'} text-lg">
+                        ${isCanceled ? '<span class="bg-red-500/20 px-3 py-1.5 rounded">취소/복구됨</span>' : '<span class="bg-blue-500/20 px-3 py-1.5 rounded">정상 획득</span>'}
                     </td>
                 `;
                 tbody.appendChild(tr);
             });
         };
 
-        // --- 뷰어 숨기기 ---
         window.updateViewerVisibilityUI = function() {
             const vc = document.getElementById('viewer-container');
             const adminWarning = document.getElementById('admin-viewer-hidden-warning');
             if (state.isViewerHidden) {
                 if(window.isViewerMode) {
-                    vc.style.opacity = '0'; // OBS 화면 완전히 투명화
+                    vc.style.opacity = '0'; 
                 } else {
                     vc.style.opacity = '1';
                     if(adminWarning) adminWarning.classList.replace('hidden', 'flex'); 
@@ -601,6 +601,14 @@
 
             document.getElementById('btn-open-log').addEventListener('click', () => {
                 window.open(window.location.href.split('?')[0] + '?log=true', '_blank');
+            });
+
+            document.getElementById('btn-add-stage').addEventListener('click', () => {
+                const newId = 'st_' + Date.now();
+                state.stages.push({
+                    id: newId, name: '신규단계', min: 1000, max: 2000, count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: []
+                });
+                saveState(); renderAdminStages(); showModal("새로운 단계가 추가되었습니다. 리스트 맨 아래를 확인하세요.");
             });
 
             document.getElementById('new-game-btn').addEventListener('click', () => {
@@ -664,7 +672,9 @@
             });
 
             document.querySelectorAll('input[name="gameMode"]').forEach(r => r.addEventListener('change', e => {
-                state.gameMode = e.target.value; updateModeIndicator(); saveState(); window.updateViewerStateOnly();
+                state.gameMode = e.target.value; updateModeIndicator(); saveState(); 
+                window.updateViewerStateOnly();
+                renderAdminStages(); // 배수 표시 여부 갱신
             }));
 
             document.getElementById('btn-copy-link').addEventListener('click', () => {
@@ -683,12 +693,11 @@
             });
         }
 
-        // 배너 텍스트 업데이트 (자연스러운 뱃지 디자인)
         window.updateBannerUI = function() {
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
             const textSpan = `<span>${state.bannerText}</span>`;
             if (stage) {
-                document.getElementById('banner-text').innerHTML = `<span class="text-yellow-900 bg-yellow-400 px-4 py-1 rounded-full mr-3 border-2 border-yellow-600 shadow-sm inline-block text-[2rem] align-middle -translate-y-1 font-black">${stage.name}</span>${textSpan}`;
+                document.getElementById('banner-text').innerHTML = `<span class="text-white bg-slate-800 px-4 py-1.5 rounded-full mr-4 border-2 border-yellow-500 shadow-md inline-block text-[2rem] align-middle -translate-y-1 font-black">${stage.name}</span>${textSpan}`;
             } else {
                 document.getElementById('banner-text').innerHTML = textSpan;
             }
@@ -718,7 +727,20 @@
         window.removeMember = (m) => { state.members = state.members.filter(x => x !== m); state.eliminatedMembers = state.eliminatedMembers.filter(x => x !== m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
         window.toggleSurvival = (m) => { if(state.eliminatedMembers.includes(m)) state.eliminatedMembers = state.eliminatedMembers.filter(x=>x!==m); else state.eliminatedMembers.push(m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
 
-        // --- 관리자 단계 렌더링 (대기목록 상세 내역 텍스트 확대 및 구조개선) ---
+        window.applyTextScroll = function() {
+            document.querySelectorAll('.sig-name-container').forEach(container => {
+                const text = container.querySelector('.sig-name-text');
+                if (text && text.scrollWidth > container.clientWidth + 2) {
+                    text.classList.add('is-scrolling');
+                    container.style.justifyContent = 'flex-start';
+                } else if (text) {
+                    text.classList.remove('is-scrolling');
+                    container.style.justifyContent = 'center';
+                }
+            });
+        };
+        window.addEventListener('resize', () => { if(window.applyTextScroll) window.applyTextScroll(); });
+
         function renderAdminStages() {
             if(window.isViewerMode || window.isLogMode) return;
             const container = document.getElementById('stages-container'); container.innerHTML = '';
@@ -732,11 +754,12 @@
                         const multi = state.multipliers[n] || 1;
                         const fbItem = window.firebaseItems.find(i => i.id === n);
                         const name = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름없음';
+                        const multiUI = state.gameMode === 'hunter' ? `<span class="text-pink-400 font-black text-[10px] ml-1">${multi}배</span>` : '';
                         return `
-                            <div class="bg-slate-700 border border-slate-600 rounded px-2 py-1.5 flex justify-between items-center gap-2">
+                            <div class="bg-slate-700 border border-slate-600 rounded px-2 py-1.5 flex justify-between items-center gap-1">
                                 <span class="text-yellow-300 font-bold text-xs">${n}</span>
-                                <span class="text-white truncate flex-1 text-xs text-left">${name}</span>
-                                <span class="text-pink-400 font-black text-xs">${multi}배</span>
+                                <span class="text-white truncate flex-1 text-xs text-left px-1">${name}</span>
+                                ${multiUI}
                             </div>`;
                     }).join('') 
                     : '<div class="text-slate-500 font-bold px-2 py-1 col-span-2">대기목록 없음</div>';
@@ -788,7 +811,6 @@
             saveState();
         };
 
-        // --- 랜덤 배수 분배 규칙 ---
         function applyMultiplierRule(stage) {
             if(stage.previewNumbers.length === 0) return;
             
@@ -806,12 +828,11 @@
             const min = parseInt(document.getElementById('multi-min').value) || 1;
             const max = parseInt(document.getElementById('multi-max').value) || 1;
             
-            // 나머지 카드 채우기
             while(multiPool.length < stage.previewNumbers.length) {
                 if (useRandomRest) {
                     multiPool.push(Math.floor(Math.random() * (max - min + 1)) + min);
                 } else {
-                    multiPool.push(1); // 체크 해제 시 1배 고정
+                    multiPool.push(1); 
                 }
             }
             
@@ -846,7 +867,6 @@
             });
         }
 
-        // --- 크게보기 설정 팝업 ---
         let currentPreviewStageId = null;
         window.openPreviewPopup = (id) => {
             const stage = state.stages.find(s => s.id === id); if(!stage) return;
@@ -874,6 +894,12 @@
                 const sigName = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름 없음';
                 const multi = state.multipliers[num] || 1;
                 
+                const multiUI = state.gameMode === 'hunter' ? `
+                    <div class="flex items-center justify-between w-full bg-slate-900 p-1.5 rounded">
+                        <span class="text-[10px] text-slate-400 font-bold">배수</span>
+                        <input type="number" class="admin-input w-12 text-[11px] py-0.5" value="${multi}" min="1" onchange="updateMultiplier(${num}, this.value)">
+                    </div>` : '';
+
                 content.innerHTML += `
                     <div class="bg-slate-800 p-2 rounded border border-slate-600 flex flex-col items-center">
                         <div class="w-full aspect-video bg-slate-900 rounded overflow-hidden flex items-center justify-center mb-1">
@@ -883,16 +909,12 @@
                             <div class="text-yellow-400 font-black text-sm">${num}</div>
                             <div class="text-slate-300 text-[10px] truncate w-full">${sigName}</div>
                         </div>
-                        <div class="flex items-center justify-between w-full bg-slate-900 p-1.5 rounded">
-                            <span class="text-[10px] text-slate-400 font-bold">배수</span>
-                            <input type="number" class="admin-input w-12 text-[11px] py-0.5" value="${multi}" min="1" onchange="updateMultiplier(${num}, this.value)">
-                        </div>
+                        ${multiUI}
                     </div>`;
             });
         }
         window.updateMultiplier = (num, val) => { state.multipliers[num] = parseInt(val)||1; saveState(); renderAdminStages(); };
 
-        // --- 송출 렌더링 ---
         window.triggerBroadcast = (id) => {
             state.broadcastTimestamp = Date.now(); 
             executeBroadcast(id, false);
@@ -945,8 +967,10 @@
                                 ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
                             </div>
                             <div class="text-container">
-                                <span class="sig-id font-black ${isSoldOut && !isClaimed ? 'text-slate-400' : 'text-red-600'} drop-shadow-sm">[ ${num} ]</span>
-                                <span class="sig-name font-bold ${isSoldOut && !isClaimed ? 'text-slate-500' : 'text-slate-800'}">${sigName}</span>
+                                <span class="sig-id drop-shadow-sm">[ ${num} ]</span>
+                                <div class="sig-name-container">
+                                    <span class="sig-name-text">${sigName}</span>
+                                </div>
                             </div>
                         </div>
                         <div class="card-back"><span class="text-6xl font-black text-slate-500 drop-shadow-md">?</span></div>
@@ -972,9 +996,10 @@
             if(!window.isViewerMode && !window.isLogMode) renderAdminStages(); 
             window.updateViewerStateOnly(); 
             window.updateViewerVisibilityUI();
+            
+            setTimeout(() => { if(window.applyTextScroll) window.applyTextScroll(); }, 300);
         }
 
-        // --- 실시간 렌더링 (깜빡임 최소화) ---
         window.updateViewerStateOnly = function() {
             if(!state.currentBroadcastStageId) return;
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
@@ -1007,14 +1032,12 @@
             document.getElementById('progress-bar').style.width = `${percent}%`;
             if(percent >= 80 && percent < 100) pw.classList.add('warning-active'); else pw.classList.remove('warning-active');
             
-            // STAGE CLEAR는 일반 모드에서만 100%일 때 출력
             if(state.gameMode === 'standard' && percent === 100 && total > 0) {
                 document.getElementById('stage-clear-overlay').classList.add('show'); 
             } else { 
                 document.getElementById('stage-clear-overlay').classList.remove('show'); 
             }
 
-            // 생존게임 전광판 업데이트 (박스형, 적을 땐 중앙 고정)
             if(state.gameMode === 'survival') {
                 const claimedNames = Object.values(state.claimedCards);
                 const survivors = state.members.filter(m => !state.eliminatedMembers.includes(m) && !claimedNames.includes(m));
@@ -1027,8 +1050,7 @@
                     marqueeText.classList.remove('animate');
                     marqueeContainer.classList.add('center-mode');
                 } else {
-                    // 글자 크기를 키우고 두껍게
-                    marqueeText.innerHTML = survivors.map(m => `<span class="inline-block bg-slate-800 border-2 border-yellow-400 text-yellow-300 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(250,204,21,0.6)] animate-pulse text-2xl font-black tracking-wider">${m}</span>`).join('');
+                    marqueeText.innerHTML = survivors.map(m => `<span class="inline-block bg-slate-800 border-2 border-yellow-400 text-yellow-300 px-8 py-3 rounded-2xl shadow-[0_0_15px_rgba(250,204,21,0.6)] text-4xl font-black tracking-wider mx-2">${m}</span>`).join('');
                     
                     if(survivors.length <= 5) {
                         marqueeText.classList.remove('animate');
@@ -1040,7 +1062,6 @@
                 }
             }
 
-            // 관리자 패널의 Undo(솔드아웃 복구) 리스트 강제 갱신
             if(!window.isViewerMode && !window.isLogMode) {
                 const ul = document.getElementById('undo-list-container'); ul.innerHTML = '';
                 document.getElementById('undo-count').innerText = `${soldCount}개 기록됨`;
@@ -1055,7 +1076,7 @@
                             state.globalSoldOutList = state.globalSoldOutList.filter(n=>n!==num); 
                             delete state.claimedCards[num]; 
                             state.revealedCards = state.revealedCards.filter(n=>n!==num);
-                            cancelLog(num); // 취소 로그 반영
+                            cancelLog(num); 
                             saveState(); window.updateViewerStateOnly(); 
                         };
                         ul.appendChild(btn);
@@ -1064,7 +1085,6 @@
             }
         }
 
-        // --- 클릭 사이클 제어 ---
         let pendingClaimNum = null; 
         function handleCardClick(num, wrapperElement) {
             const isSold = state.globalSoldOutList.includes(num); 
@@ -1112,9 +1132,17 @@
             let targetMembers = state.members;
             if (survivalOnly) targetMembers = targetMembers.filter(m => !state.eliminatedMembers.includes(m));
             
-            document.getElementById('member-btn-list').innerHTML = targetMembers.map(m => 
-                `<button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded shadow transition" onclick="assignMember('${m}')">${m}</button>`
-            ).join('');
+            const claimedNames = Object.values(state.claimedCards);
+            
+            document.getElementById('member-btn-list').innerHTML = targetMembers.map(m => {
+                let isAlreadyClaimed = state.gameMode === 'survival' && claimedNames.includes(m);
+                let btnClass = isAlreadyClaimed 
+                    ? "bg-slate-700 text-slate-500 font-bold py-2 px-4 rounded shadow opacity-50 cursor-not-allowed" 
+                    : "bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded shadow transition";
+                let onclickAttr = isAlreadyClaimed ? "" : `onclick="assignMember('${m}')"`;
+                
+                return `<button class="${btnClass}" ${onclickAttr}>${m}</button>`;
+            }).join('');
             document.getElementById('member-select-modal').classList.replace('hidden', 'flex');
         }
 
@@ -1125,7 +1153,6 @@
                 state.globalSoldOutList.push(pendingClaimNum);
             }
             
-            // 로그 추가
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
             const sName = stage ? stage.name : '알수없음';
             const nowTime = new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1144,7 +1171,6 @@
         }
         window.closeMemberModal = function() { document.getElementById('member-select-modal').classList.replace('flex', 'hidden'); pendingClaimNum = null; }
 
-        // --- 타이머 ---
         window.timerInterval = null;
         function updateTimerBtnUI() {
             const btn = document.getElementById('btn-timer-start');
