@@ -507,37 +507,38 @@
                         <template x-for="event in events" :key="event.id">
                             <div class="w-full relative avoid-break z-10" x-show="getEventItems(event.targets).length > 0">
                                 <div class="absolute -inset-1 rounded-2xl blur-md opacity-40 animate-pulse" :style="`background: linear-gradient(to right, ${event.color}44, ${event.color}, ${event.color}44);`"></div>
-                                <div class="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 transition-colors duration-300" :style="`border-color: ${event.color}aa;`">
-                                    <div class="p-4 rounded-t-xl flex justify-center items-center gap-2 relative overflow-hidden" :style="`background: linear-gradient(135deg, ${event.color}ee, ${event.color}); text-shadow: 0 2px 4px rgba(0,0,0,0.3);`">
-                                        <div class="absolute inset-0 bg-white/20 opacity-30 blur-xl animate-pulse"></div>
-                                        <h2 class="text-2xl font-black text-white tracking-widest relative z-10" x-text="event.title"></h2>
-                                        <span class="text-lg font-bold text-white/90 relative z-10" x-text="`(${getEventItems(event.targets).length}개)`"></span>
+                                <div class="relative rounded-xl p-6 border-2 transition-colors duration-300 shadow-xl" :class="isDarkMode ? 'bg-gray-800/95' : 'bg-gray-50'" :style="`border-color: ${event.color};`">
+                                    
+                                    <div class="flex items-center gap-3 mb-5 border-b pb-3 transition-colors duration-300" :style="`border-color: ${event.color}50;`">
+                                        <i class="ph-fill ph-star text-3xl" :style="`color: ${event.color};`"></i>
+                                        <h2 class="text-2xl font-black transition-colors duration-300" :style="`color: ${event.color};`">
+                                            <span x-text="event.title"></span>
+                                            <span class="text-lg font-bold ml-1 opacity-80" x-text="`(${getEventItems(event.targets).length}개)`"></span>
+                                        </h2>
                                     </div>
                                     
-                                    <div class="p-4 sm:p-6 rounded-b-xl">
-                                        <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
-                                            <template x-for="item in getEventItems(event.targets)" :key="item.id">
-                                                <div class="flex flex-col items-center gap-3 w-full avoid-break">
-                                                    <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" :style="item.isNew ? '' : `border-color: ${event.color}88;`" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : ''">
-                                                        <img :src="displayImageUrl(item.imgUrl)" @error="handleImageError($event, item.imgUrl)" crossorigin="anonymous" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
-                                                        <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
-                                                        <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
-                                                            <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex flex-col items-center w-full leading-tight px-1">
-                                                        <span class="font-black mb-0.5 flex items-center gap-1 transition-all" :style="`color: ${event.color};`" :class="zoomTextClassId">
-                                                            <span x-text="item.id"></span>
-                                                            <button x-show="!isViewerMode && item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
-                                                        </span>
-                                                        <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : (isDarkMode ? 'text-white' : 'text-gray-900')]" x-text="cleanName(item.name)"></span>
-                                                        <template x-if="!isViewerMode">
-                                                            <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
-                                                        </template>
+                                    <div class="grid gap-4 sm:gap-6" :class="zoomGridClass">
+                                        <template x-for="item in getEventItems(event.targets)" :key="item.id">
+                                            <div class="flex flex-col items-center gap-3 w-full avoid-break">
+                                                <div class="relative w-full aspect-video rounded-lg overflow-hidden border-2 transition-all shadow-lg group" :style="item.isNew ? '' : `border-color: ${event.color}88;`" :class="item.isNew ? 'border-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.6)]' : ''">
+                                                    <img :src="displayImageUrl(item.imgUrl)" @error="handleImageError($event, item.imgUrl)" crossorigin="anonymous" decoding="async" loading="lazy" class="w-full h-full object-cover" :class="isDarkMode ? 'bg-gray-800' : 'bg-gray-200'">
+                                                    <div x-show="item.isNew" class="absolute top-0 left-0 bg-yellow-400 text-black text-xs sm:text-sm font-black px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-br-lg z-10 shadow-sm">NEW</div>
+                                                    <div x-show="!isViewerMode && item.isGif" class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition cursor-pointer z-20" @click="openGifModal(item)">
+                                                        <span class="bg-black/80 text-white text-xs font-bold px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg">🔍 설정</span>
                                                     </div>
                                                 </div>
-                                            </template>
-                                        </div>
+                                                <div class="flex flex-col items-center w-full leading-tight px-1">
+                                                    <span class="font-black mb-0.5 flex items-center gap-1 transition-all" :style="`color: ${event.color};`" :class="zoomTextClassId">
+                                                        <span x-text="item.id"></span>
+                                                        <button x-show="!isViewerMode && item.audioUrl" @click.stop="playAudio(item)" class="text-blue-400 hover:text-blue-300 transition" title="음원 재생"><i class="ph-fill ph-speaker-high"></i></button>
+                                                    </span>
+                                                    <span class="font-bold text-center break-words w-full tracking-tight transition-all duration-300" :class="[zoomTextClassName, item.isNew ? (isDarkMode ? 'text-yellow-300' : 'text-yellow-600') : '']" :style="!item.isNew ? `color: ${event.color};` : ''" x-text="cleanName(item.name)"></span>
+                                                    <template x-if="!isViewerMode">
+                                                        <audio preload="none" :id="'audio_player_' + item.id" :src="item.audioUrl" class="hidden"></audio>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
                                     </div>
                                 </div>
                             </div>
