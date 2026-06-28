@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V11)</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V12)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -113,7 +113,8 @@
                         </tr>
                     </thead>
                     <tbody id="log-tbody">
-                        </tbody>
+                        <!-- JS Rendering -->
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -178,6 +179,7 @@
     </div>
 
 
+    <!-- [우측] 관리자 패널 -->
     <div id="admin-panel" class="w-[580px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
@@ -343,6 +345,7 @@
         </div>
     </div>
 
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -356,7 +359,7 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v11');
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v12');
 
         window.syncToCloud = async (stateObj) => {
             if(!window.isViewerMode && !window.isLogMode && window.isFirebaseReady) {
@@ -374,7 +377,7 @@
                         window.state = { ...window.state, ...cloudState };
                         if(!window.state.actionLogs) window.state.actionLogs = [];
                     } else {
-                        const saved = localStorage.getItem('sigHunterState_v11');
+                        const saved = localStorage.getItem('sigHunterState_v12');
                         if (saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                     }
                 } catch(e) { console.error("Cloud state load error", e); }
@@ -516,7 +519,7 @@
 
         window.saveState = function() {
             if (window.isViewerMode || window.isLogMode) return;
-            localStorage.setItem('sigHunterState_v11', JSON.stringify(state)); 
+            localStorage.setItem('sigHunterState_v12', JSON.stringify(state)); 
             if(window.syncToCloud) window.syncToCloud(state); 
         };
 
@@ -1193,8 +1196,11 @@
                     window.showModal("화면 배열 및 배너가 뷰어에 즉시 동기화되었습니다.");
                 });
 
-                document.querySelectorAll('input[name="gameMode"]').forEach(r => r.addEventListener('change', e => {
-                    state.gameMode = e.target.value; window.updateModeIndicator(); window.saveState(); 
+                document.querySelectorAll('input[name="gameMode"]')?.forEach(r => r.addEventListener('change', e => {
+                    state.gameMode = e.target.value; 
+                    window.updateModeIndicator(); 
+                    window.renderMembers(); 
+                    window.saveState(); 
                     window.updateViewerStateOnly();
                     window.renderAdminStages(); 
                 }));
