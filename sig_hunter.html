@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>시그헌터 도우미 By. JIN (DB 연동형)</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+    <style>
+        :root { --grid-cols: 5; --grid-rows: 2; }
+        html, body {
+            background-color: transparent !important;
+            font-family: 'GmarketSans', sans-serif;
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; user-select: none;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        #viewer-container { background-color: transparent; }
+        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        #card-grid {
+            display: grid;
+            grid-template-columns: repeat(var(--grid-cols), minmax(0, 1fr));
+            grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
+            gap: 0.6rem; transition: all 0.5s ease;
+        }
+        .perspective-1000 { perspective: 1000px; }
+        .card-inner {
+            width: 100%; height: 100%; position: relative;
+            transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform-style: preserve-3d;
+        }
+        .card-inner.is-flipped { transform: rotateY(180deg); }
+        .card-front, .card-back {
+            position: absolute; width: 100%; height: 100%;
+            backface-visibility: hidden; border-radius: 0.75rem; overflow: hidden;
+        }
+        .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
+
+        .number-bar span {
+            font-size: clamp(10px, calc((100vw - 500px) / var(--grid-cols) * 0.12), 22px);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; text-align: center;
+        }
+        .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
+        @keyframes pulse-gold { 0%, 100% { box-shadow: 0 0 15px rgba(251, 191, 36, 0.6); } 50% { box-shadow: 0 0 30px rgba(251, 191, 36, 1); } }
+
+        .card-wrapper.is-sold-out .card-front img { filter: grayscale(100%) brightness(0.6); }
+        .card-wrapper.is-sold-out .card-front .number-bar { background-color: #475569; color: #94a3b8; }
+        .sold-out-stamp {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg);
+            background: rgba(220, 38, 38, 0.95); color: white; font-size: 2rem; font-weight: 900;
+            padding: 0.5rem 1.5rem; border-radius: 0.5rem; border: 3px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20;
+        }
+        .card-wrapper.is-sold-out .sold-out-stamp { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-5deg); }
+
+        @keyframes warning-blink { 0%, 100% { background-color: rgba(15, 23, 42, 0.8); border-color: rgba(255,255,255,0.1); } 50% { background-color: rgba(185, 28, 28, 0.7); border-color: #ef4444; } }
+        .warning-active { animation: warning-blink 1.5s infinite; }
+        #stage-clear-overlay { opacity: 0; pointer-events: none; transform: scale(0.9); transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        #stage-clear-overlay.show { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+        #admin-panel { background-color: #0f172a; }
+        .admin-input { background: #1e293b; color: white; border: 1px solid #475569; border-radius: 0.25rem; outline: none; padding: 0.25rem; font-size: 0.875rem; text-align: center; transition: border 0.2s; }
+        .admin-input:focus { border-color: #3b82f6; }
+    </style>
+</head>
+<body class="flex w-full h-screen relative">
+
+    <div id="viewer-container" class="flex-1 relative flex flex-col justify-center gap-8 p-8 overflow-hidden">
+        <div class="flex justify-between items-start z-10 w-full max-w-[1600px] mx-auto">
+            <div id="progress-wrapper" class="glass-panel p-4 rounded-xl w-[400px] hidden shadow-xl transition-all">
+                <div class="flex justify-between items-end mb-2">
+                    <span class="text-white font-bold text-lg tracking-wide">현재 단계 완판율</span>
+                    <span id="progress-text" class="text-yellow-400 font-black text-2xl">0 / 0</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-5 overflow-hidden border border-slate-600">
+                    <div id="progress-bar" class="bg-gradient-to-r from-green-400 to-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+            <div id="viewer-timer-box" class="glass-panel px-8 py-3 rounded-xl hidden shadow-xl border-2 border-slate-600 transition-colors">
+                <span id="viewer-timer" class="text-white font-mono text-5xl font-black tracking-wider drop-shadow-md">10:00</span>
+            </div>
+        </div>
+
+        <div class="flex flex-col justify-center items-center relative w-full max-w-[1600px] mx-auto z-10">
+            <div id="card-grid" class="w-full place-content-center perspective-1000"></div>
+            <div id="empty-state-msg" class="absolute inset-0 flex items-center justify-center">
+                <div class="glass-panel px-10 py-8 rounded-2xl border-4 border-dashed border-slate-500 text-center shadow-2xl">
+                    <h2 class="text-3xl font-bold text-white mb-2 tracking-widest">방송 준비중</h2>
+                    <p class="text-slate-400">우측 관리자 패널에서 설정을 마치고 송출을 시작해주세요.</p>
+                </div>
+            </div>
+            <div id="stage-clear-overlay" class="absolute inset-0 flex items-center justify-center z-50">
+                <div class="bg-red-600/90 backdrop-blur-md border-4 border-white px-16 py-8 rounded-3xl shadow-[0_0_50px_rgba(220,38,38,0.8)] rotate-[-5deg]">
+                    <h1 class="text-8xl font-black text-white tracking-tighter drop-shadow-lg">ALL SOLD OUT</h1>
+                    <p class="text-center text-yellow-300 text-2xl font-bold mt-2 tracking-widest">해당 단계가 완판되었습니다!</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="banner-wrapper" class="hidden w-full max-w-[1600px] mx-auto z-10">
+            <div class="bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 text-black text-center text-5xl font-black py-5 rounded-2xl shadow-[0_0_20px_rgba(250,204,21,0.5)] border-b-8 border-yellow-700">
+                <span id="banner-text">시그헌터 목록 (별풍점수 2배)</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-panel" class="w-[500px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
+        <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
+            <div class="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-sm w-full shadow-2xl text-center mx-4">
+                <p id="custom-modal-msg" class="text-white mb-6 whitespace-pre-wrap leading-relaxed text-sm"></p>
+                <div class="flex gap-3 justify-center" id="custom-modal-btns"></div>
+            </div>
+        </div>
+
+        <div id="preview-popup" class="absolute inset-0 bg-slate-900/95 z-[60] hidden flex-col">
+            <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+                <h3 id="popup-title" class="text-lg font-black text-yellow-400">00단계 대기목록</h3>
+                <button id="close-popup-btn" class="text-red-400 hover:text-white hover:bg-red-600 font-bold px-3 py-1 border border-red-500 rounded transition text-sm">닫기 ✖</button>
+            </div>
+            <div id="popup-content" class="flex-1 p-4 overflow-y-auto grid grid-cols-3 gap-3 content-start"></div>
+        </div>
+
+        <div class="bg-red-600 text-white text-center text-sm font-black py-1.5 tracking-wide flex items-center justify-center gap-2 shadow-md z-10 shrink-0">
+            ⚠️ OBS에서 <span class="text-yellow-300 px-1">`Alt + 드래그`</span>로 이 패널을 잘라주세요
+        </div>
+
+        <div class="p-4 bg-slate-950 flex justify-between items-center border-b border-slate-800 shrink-0">
+            <h2 class="text-lg font-black text-white">⚙️ 시그헌터 관리자 패널</h2>
+            <button id="btn-capture" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded shadow transition">📸 캡처</button>
+        </div>
+
+        <div class="p-4 bg-slate-900 border-b border-slate-700 shadow-xl z-20 shrink-0 relative">
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-600 flex items-center justify-between shadow-inner">
+                <label class="block text-xs font-black text-emerald-400">⏱️ 실시간 타이머 조작</label>
+                <div class="flex items-center justify-center gap-1">
+                    <input type="number" id="timer-min" class="admin-input w-12 text-lg font-bold py-1 bg-slate-900" value="10">
+                    <span class="text-white font-bold">:</span>
+                    <input type="number" id="timer-sec" class="admin-input w-12 text-lg font-bold py-1 bg-slate-900" value="00">
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-timer-start" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold px-3 py-2 rounded shadow transition">시작/정지</button>
+                    <button id="btn-timer-reset" class="bg-slate-600 hover:bg-slate-500 text-white text-[11px] font-bold px-3 py-2 rounded shadow transition">초기화</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 p-4 overflow-y-auto space-y-4 custom-scroll relative z-10">
+            <div class="bg-slate-800 p-4 rounded-xl border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-sm font-bold text-blue-400">☁️ Firebase DB 연동 상태</label>
+                    <span id="db-status-badge" class="px-2 py-1 text-[10px] font-bold rounded-full bg-slate-700 text-slate-300">연결 대기중...</span>
+                </div>
+                <p id="db-status-text" class="text-xs text-slate-400 mt-1">시그니처 뷰어의 데이터를 실시간으로 불러옵니다.</p>
+
+                <div class="grid grid-cols-2 gap-2 mt-4 pt-3 border-t border-slate-700">
+                    <button id="new-game-btn" class="bg-red-900 hover:bg-red-800 text-red-100 font-bold py-2 rounded text-xs shadow transition border border-red-700">🔄 기록 초기화</button>
+                    <button id="auto-generate-btn" class="bg-indigo-900 hover:bg-indigo-800 text-indigo-100 font-bold py-2 rounded text-xs shadow transition border border-indigo-700">✨ 1~16단계 리셋</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700">
+                <label class="block text-xs font-bold text-amber-400 mb-3">🎨 화면 배열 및 배너 설정</label>
+                <div class="flex items-center gap-4 mb-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">그리드</span>
+                        <input type="number" id="input-cols" class="admin-input w-12 text-sm" value="5" min="1" max="10"> <span class="text-xs text-slate-400">×</span>
+                        <input type="number" id="input-rows" class="admin-input w-12 text-sm" value="2" min="1" max="10">
+                    </div>
+                    <div class="flex-1 flex items-center gap-2">
+                        <span class="text-[10px] text-slate-400 shrink-0">하단 배너</span>
+                        <input type="text" id="input-banner" class="admin-input w-full text-left px-2 text-xs" value="시그헌터 목록 (별풍점수 2배)">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-4 rounded-xl border border-red-900/50 relative overflow-hidden shadow-sm">
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-sm font-bold text-red-400">↩️ 솔드아웃 복구</label>
+                    <span id="undo-count" class="text-xs text-slate-400 font-bold bg-slate-900 px-2 py-0.5 rounded">0개 판매됨</span>
+                </div>
+                <div id="undo-list-container" class="flex flex-wrap gap-2 min-h-[40px] max-h-[120px] overflow-y-auto bg-slate-900 p-2 rounded border border-slate-700 relative z-10 custom-scroll">
+                    <div class="text-xs text-slate-600 w-full text-center py-2">판매 기록이 없습니다.</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex justify-between items-center mb-3 mt-4">
+                    <label class="block text-sm font-bold text-indigo-300">🎲 단계별 세부 설정 및 송출</label>
+                    <button id="btn-add-stage" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded shadow">➕ 단계 추가</button>
+                </div>
+                <button id="batch-generate-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 mb-4 rounded-xl shadow-[0_0_15px_rgba(37,99,235,0.4)] border border-blue-400 transition transform active:scale-95 text-sm">
+                    🎲 전체 단계 일괄 랜덤 생성 (중복 방지)
+                </button>
+                <div id="stages-container" class="space-y-3 pb-20"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA_I1iwH0U26aaBavXqHL7fG32xvwDkF1o",
+            authDomain: "excel-ec5e4.firebaseapp.com",
+            projectId: "excel-ec5e4",
+            storageBucket: "excel-ec5e4.firebasestorage.app",
+            messagingSenderId: "427552489685",
+            appId: "1:427552489685:web:5c9a95aa347ddc4890225c"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Global State
+        window.firebaseItems = [];
+        window.isFirebaseReady = false;
+
+        signInAnonymously(auth).then(() => {
+            const configDoc = doc(db, 'signature_boards', 'main_board_data');
+            onSnapshot(configDoc, (snapshot) => {
+                if (snapshot.exists()) {
+                    const data = snapshot.data();
+                    if(data.itemConfigs) {
+                        window.firebaseItems = data.itemConfigs;
+                        window.isFirebaseReady = true;
+                        
+                        document.getElementById('db-status-badge').className = "px-2 py-1 text-[10px] font-bold rounded-full bg-blue-600 text-white shadow-[0_0_8px_rgba(37,99,235,0.8)] animate-pulse";
+                        document.getElementById('db-status-badge').innerText = "🟢 실시간 연동중";
+                        document.getElementById('db-status-text').innerHTML = `총 <b>${window.firebaseItems.length}</b>개의 시그니처 데이터를 성공적으로 불러왔습니다.`;
+                        
+                        // 송출중인 화면이 있다면 즉시 UI 업데이트 (이미지/이름 등 최신화)
+                        if(window.state && window.state.currentBroadcastStageId) {
+                            window.executeBroadcast(window.state.currentBroadcastStageId, true);
+                        }
+                    }
+                }
+            });
+        }).catch((error) => console.error("Firebase Login Error:", error));
+    </script>
+
+    <script>
+        function showModal(message, isConfirm = false, onConfirm = null) {
+            const modal = document.getElementById('custom-modal');
+            const msgEl = document.getElementById('custom-modal-msg');
+            const btns = document.getElementById('custom-modal-btns');
+            msgEl.innerText = message; btns.innerHTML = '';
+
+            if (isConfirm) {
+                const btnCancel = document.createElement('button');
+                btnCancel.className = "px-6 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded font-bold text-xs transition shadow-sm";
+                btnCancel.innerText = "취소"; btnCancel.onclick = () => { modal.classList.replace('flex', 'hidden'); };
+                
+                const btnOk = document.createElement('button');
+                btnOk.className = "px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-xs transition";
+                btnOk.innerText = "확인"; btnOk.onclick = () => { modal.classList.replace('flex', 'hidden'); if (onConfirm) onConfirm(); };
+                btns.append(btnCancel, btnOk);
+            } else {
+                const btnOk = document.createElement('button');
+                btnOk.className = "px-8 py-2 bg-blue-600 text-white rounded font-bold text-xs transition";
+                btnOk.innerText = "확인"; btnOk.onclick = () => { modal.classList.replace('flex', 'hidden'); };
+                btns.append(btnOk);
+            }
+            modal.classList.replace('hidden', 'flex');
+        }
+
+        const PRESET_STAGES = [
+            { id: 'st_1', name: "01단계", min: 1000, max: 1499, count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: [] },
+            { id: 'st_2', name: "02단계", min: 1100, max: 1599, count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: [] },
+            { id: 'st_3', name: "03단계", min: 1200, max: 1999, count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: [] },
+            { id: 'st_4', name: "04단계", min: 1300, max: 2499, count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: [] },
+            { id: 'st_10', name: "10단계", min: 5000, max: 10000, count: 10, mandatory: "5000,10000", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: [] }
+            // 원하시는 단계 만큼 추가 가능 (여기서는 간소화)
+        ];
+
+        window.state = {
+            cols: 5, rows: 2, bannerText: "시그헌터 목록 (별풍점수 2배)",
+            timer: { remaining: 600, isRunning: false, targetEnd: null },
+            globalSoldOutList: [], currentBroadcastStageId: null,
+            stages: JSON.parse(JSON.stringify(PRESET_STAGES))
+        };
+
+        const DOM = {
+            viewerGrid: document.getElementById('card-grid'), emptyMsg: document.getElementById('empty-state-msg'),
+            bannerWrap: document.getElementById('banner-wrapper'), bannerText: document.getElementById('banner-text'),
+            progWrap: document.getElementById('progress-wrapper'), progText: document.getElementById('progress-text'), progBar: document.getElementById('progress-bar'),
+            clearOverlay: document.getElementById('stage-clear-overlay'), timerBox: document.getElementById('viewer-timer-box'), timerDisplay: document.getElementById('viewer-timer'),
+            undoList: document.getElementById('undo-list-container'), undoCount: document.getElementById('undo-count'),
+            stageContainer: document.getElementById('stages-container'),
+            inCols: document.getElementById('input-cols'), inRows: document.getElementById('input-rows'), inBanner: document.getElementById('input-banner'),
+            timerBoxMin: document.getElementById('timer-min'), timerBoxSec: document.getElementById('timer-sec'),
+            popupTitle: document.getElementById('popup-title'), popupContent: document.getElementById('popup-content'), previewPopup: document.getElementById('preview-popup')
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedState = localStorage.getItem('sigHunterState_v2');
+            if(savedState) { try { window.state = { ...window.state, ...JSON.parse(savedState) }; } catch(e){} }
+            DOM.inCols.value = state.cols; DOM.inRows.value = state.rows; DOM.inBanner.value = state.bannerText;
+            updateViewerLayout(); renderAdminStages();
+        });
+
+        function saveState() { localStorage.setItem('sigHunterState_v2', JSON.stringify(state)); }
+
+        DOM.inCols.addEventListener('change', (e) => { state.cols = e.target.value; updateViewerLayout(); saveState(); });
+        DOM.inRows.addEventListener('change', (e) => { state.rows = e.target.value; updateViewerLayout(); saveState(); });
+        DOM.inBanner.addEventListener('input', (e) => { state.bannerText = e.target.value; DOM.bannerText.innerText = e.target.value; saveState(); });
+
+        function updateViewerLayout() {
+            document.documentElement.style.setProperty('--grid-cols', state.cols);
+            document.documentElement.style.setProperty('--grid-rows', state.rows);
+        }
+
+        document.getElementById('new-game-btn').addEventListener('click', () => {
+            showModal("모든 솔드아웃 기록 및 송출 화면이 초기화됩니다.", true, () => {
+                state.globalSoldOutList = []; state.currentBroadcastStageId = null;
+                DOM.emptyMsg.style.display = 'flex'; DOM.viewerGrid.innerHTML = '';
+                DOM.bannerWrap.classList.add('hidden'); DOM.progWrap.classList.add('hidden'); DOM.timerBox.classList.add('hidden');
+                saveState(); renderAdminStages(); updateProgressAndUndoUI();
+            });
+        });
+
+        document.getElementById('auto-generate-btn').addEventListener('click', () => {
+            showModal("설정값을 기본값으로 리셋합니다.", true, () => {
+                state.stages = JSON.parse(JSON.stringify(PRESET_STAGES)); saveState(); renderAdminStages();
+            });
+        });
+
+        function renderAdminStages() {
+            DOM.stageContainer.innerHTML = '';
+            state.stages.forEach((stage) => {
+                const isBroadcasting = state.currentBroadcastStageId === stage.id;
+                const div = document.createElement('div');
+                div.className = `bg-slate-800 p-3 rounded-lg border ${isBroadcasting ? 'border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'border-slate-700'} relative transition-all`;
+                
+                div.innerHTML = `
+                    <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 cursor-move handle">
+                        <div class="flex items-center gap-2 w-full">
+                            <span class="text-slate-500">↕</span>
+                            <input type="text" class="admin-input w-20 text-blue-300 font-bold" value="${stage.name}" data-action="update-name" data-id="${stage.id}">
+                            ${isBroadcasting ? '<span class="text-[10px] bg-green-600 text-white px-2 py-0.5 rounded ml-auto border border-green-400">📺 송출 중</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 mb-2 bg-slate-900 p-2 rounded border border-slate-700">
+                        <div class="flex flex-col"><span class="text-[10px] text-slate-400">범위 최소</span><input type="number" class="admin-input" value="${stage.min}" data-action="update-min" data-id="${stage.id}"></div>
+                        <div class="flex flex-col"><span class="text-[10px] text-slate-400">범위 최대</span><input type="number" class="admin-input" value="${stage.max}" data-action="update-max" data-id="${stage.id}"></div>
+                        <div class="flex flex-col"><span class="text-[10px] text-blue-400">뽑을 개수</span><input type="number" class="admin-input font-bold" value="${stage.count}" data-action="update-count" data-id="${stage.id}"></div>
+                        <div class="flex flex-col"><span class="text-[10px] text-yellow-500">1만+ 갯수</span><input type="number" class="admin-input" value="${stage.high}" data-action="update-high" data-id="${stage.id}"></div>
+                    </div>
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-[10px] text-slate-400 shrink-0">필수번호</span>
+                        <input type="text" class="admin-input w-full text-left px-2" value="${stage.mandatory}" data-action="update-mand" data-id="${stage.id}" placeholder="쉼표 구분">
+                    </div>
+                    
+                    <div class="bg-slate-900 p-2 rounded border border-slate-700">
+                        <div class="flex justify-between items-center mb-1">
+                            <button class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold py-1 px-3 rounded shadow" data-action="draw-random" data-id="${stage.id}">🎲 DB 랜덤 뽑기</button>
+                            <span class="text-[10px] text-slate-400">대기목록 (직접 수정 가능)</span>
+                        </div>
+                        <textarea class="admin-input w-full h-12 text-left p-1 text-xs text-yellow-300 font-mono resize-none" data-action="edit-preview" data-id="${stage.id}">${stage.previewNumbers.join(', ')}</textarea>
+                        
+                        <button class="w-full mt-2 bg-red-600 hover:bg-red-500 text-white text-xs font-black py-2 rounded shadow transition flex items-center justify-center gap-1 border border-red-500" data-action="broadcast" data-id="${stage.id}">
+                            ▶ 현재 목록으로 송출 시작
+                        </button>
+                    </div>
+                `;
+                DOM.stageContainer.appendChild(div);
+            });
+
+            new Sortable(DOM.stageContainer, { handle: '.handle', animation: 150, onEnd: (evt) => {
+                const item = state.stages.splice(evt.oldIndex, 1)[0];
+                state.stages.splice(evt.newIndex, 0, item); saveState();
+            }});
+        }
+
+        DOM.stageContainer.addEventListener('change', (e) => {
+            const id = e.target.dataset.id; const action = e.target.dataset.action; const stage = state.stages.find(s => s.id === id); if(!stage) return;
+            if(action === 'update-name') stage.name = e.target.value; if(action === 'update-min') stage.min = parseInt(e.target.value)||0;
+            if(action === 'update-max') stage.max = parseInt(e.target.value)||0; if(action === 'update-count') stage.count = parseInt(e.target.value)||0;
+            if(action === 'update-high') stage.high = parseInt(e.target.value)||0; if(action === 'update-mand') stage.mandatory = e.target.value;
+            if(action === 'edit-preview') {
+                let nums = e.target.value.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+                nums = [...new Set(nums)].sort((a,b) => a-b); stage.previewNumbers = nums; e.target.value = nums.join(', ');
+            }
+            saveState();
+        });
+
+        DOM.stageContainer.addEventListener('click', (e) => {
+            const id = e.target.dataset.id; const action = e.target.dataset.action; if(!id) return;
+            if(action === 'draw-random') executeStageRandom(id);
+            if(action === 'broadcast') window.executeBroadcast(id);
+        });
+
+        function executeStageRandom(id) {
+            if (!window.isFirebaseReady || window.firebaseItems.length === 0) return showModal("Firebase DB 데이터를 아직 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+            const stage = state.stages.find(s => s.id === id);
+            
+            const allOtherDrawn = new Set();
+            state.stages.forEach(s => { if (s.id !== id) { s.previewNumbers.forEach(n => allOtherDrawn.add(n)); s.broadcastNumbers.forEach(n => allOtherDrawn.add(n)); } });
+
+            const pool = window.firebaseItems.map(i => i.id).filter(n => !allOtherDrawn.has(n));
+            let drawn = [];
+
+            const mNums = stage.mandatory.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+            mNums.forEach(n => { if(pool.includes(n)) { drawn.push(n); pool.splice(pool.indexOf(n), 1); } });
+
+            let slots = stage.count - drawn.length;
+            let vipPool = pool.filter(n => n >= 10000);
+            for(let i=0; i < Math.min(stage.high, slots); i++) {
+                if(vipPool.length > 0) {
+                    let r = Math.floor(Math.random() * vipPool.length); let picked = vipPool[r];
+                    drawn.push(picked); vipPool.splice(r, 1); pool.splice(pool.indexOf(picked), 1);
+                }
+            }
+
+            slots = stage.count - drawn.length;
+            if(slots > 0) {
+                let rangePool = pool.filter(n => n >= stage.min && n <= stage.max);
+                rangePool.sort(() => Math.random() - 0.5);
+                drawn = drawn.concat(rangePool.slice(0, slots));
+            }
+
+            stage.previewNumbers = [...new Set(drawn)].sort((a,b) => a-b);
+            saveState(); renderAdminStages();
+        }
+
+        document.getElementById('batch-generate-btn').addEventListener('click', () => {
+            if (!window.isFirebaseReady) return showModal("DB 연동 대기중입니다.");
+            showModal("전체 단계의 대기목록을 랜덤 생성하시겠습니까?", true, () => {
+                state.stages.forEach(s => { executeStageRandom(s.id); }); showModal("일괄 생성 완료!");
+            });
+        });
+
+        // 뷰어 렌더링 핵심 로직
+        window.executeBroadcast = function(id, isRestore = false) {
+            if (!window.isFirebaseReady) return;
+            const stage = state.stages.find(s => s.id === id);
+            if(stage.previewNumbers.length === 0 && !isRestore) return showModal("대기목록이 비어있습니다.");
+
+            if(!isRestore) { stage.broadcastNumbers = [...stage.previewNumbers]; state.currentBroadcastStageId = id; saveState(); }
+
+            DOM.emptyMsg.style.display = 'none'; DOM.bannerWrap.classList.remove('hidden'); DOM.progWrap.classList.remove('hidden'); DOM.timerBox.classList.remove('hidden');
+            DOM.bannerText.innerText = `${stage.name} ${state.bannerText}`; DOM.clearOverlay.classList.remove('show');
+            DOM.viewerGrid.innerHTML = ''; updateViewerLayout();
+
+            stage.broadcastNumbers.forEach((num, i) => {
+                const fbItem = window.firebaseItems.find(item => item.id === num);
+                
+                // 1. Firebase에서 이미지 추출 (고정 데이터 우선, 없으면 외부 미디어 링크)
+                let imgSrc = '';
+                if(fbItem) imgSrc = fbItem.isFrozen && fbItem.frozenDataUrl ? fbItem.frozenDataUrl : (fbItem.mediaUrl || fbItem.imgUrl);
+                
+                // 2. Firebase에서 시그니처 이름 추출
+                const sigName = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름 없음';
+                
+                const isSoldOut = state.globalSoldOutList.includes(num);
+                const isVIP = num >= 10000;
+
+                const wrapper = document.createElement('div');
+                wrapper.className = `card-wrapper cursor-pointer w-full aspect-[4/3] relative ${isVIP ? 'vip-glow' : ''} ${isSoldOut ? 'is-sold-out' : ''}`;
+                wrapper.dataset.number = num; wrapper.onclick = () => handleCardClick(num, wrapper);
+
+                wrapper.innerHTML = `
+                    <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
+                        <div class="card-front">
+                            <div class="flex-1 p-1 bg-white flex items-center justify-center relative overflow-hidden">
+                                ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-contain">` : '<span class="text-red-500 font-bold text-xs">이미지 없음</span>'}
+                            </div>
+                            <div class="number-bar h-12 bg-slate-100 flex flex-col items-center justify-center border-t-2 border-slate-200 p-1 overflow-hidden leading-tight">
+                                <span class="font-black ${isSoldOut ? 'text-slate-400' : 'text-red-600'} text-lg">[ ${num} ]</span>
+                                <span class="text-xs font-bold ${isSoldOut ? 'text-slate-500' : 'text-slate-800'} w-full text-center truncate">${sigName}</span>
+                            </div>
+                        </div>
+                        <div class="card-back"><span class="text-6xl font-black text-slate-500 drop-shadow-md">?</span></div>
+                    </div>
+                    <div class="sold-out-stamp">SOLD OUT</div>
+                `;
+                DOM.viewerGrid.appendChild(wrapper);
+                if(!isRestore) setTimeout(() => { const inner = wrapper.querySelector('.card-inner'); if(inner) inner.classList.remove('is-flipped'); }, 100);
+            });
+
+            if(!isRestore) {
+                clearInterval(timerInterval);
+                const tMin = stage.timerMin || 10; const tSec = stage.timerSec || 0;
+                state.timer.remaining = tMin * 60 + tSec; state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true;
+                DOM.timerBoxMin.value = tMin; DOM.timerBoxSec.value = tSec;
+                timerInterval = setInterval(tickTimer, 200); renderTimerText();
+            }
+            renderAdminStages(); updateProgressAndUndoUI();
+        }
+
+        function handleCardClick(num, wrapperElement) {
+            const idx = state.globalSoldOutList.indexOf(num);
+            if (idx === -1) { state.globalSoldOutList.push(num); wrapperElement.classList.add('is-sold-out'); } 
+            else { state.globalSoldOutList.splice(idx, 1); wrapperElement.classList.remove('is-sold-out'); }
+            saveState(); updateProgressAndUndoUI();
+        }
+
+        function updateProgressAndUndoUI() {
+            if(!state.currentBroadcastStageId) return;
+            const stage = state.stages.find(s => s.id === state.currentBroadcastStageId); if(!stage) return;
+            
+            const total = stage.broadcastNumbers.length;
+            const currentSoldOuts = stage.broadcastNumbers.filter(n => state.globalSoldOutList.includes(n));
+            const soldCount = currentSoldOuts.length; const percent = total > 0 ? (soldCount / total) * 100 : 0;
+
+            DOM.progText.innerText = `${soldCount} / ${total}`; DOM.progBar.style.width = `${percent}%`;
+            if(percent >= 80 && percent < 100) DOM.progWrap.classList.add('warning-active'); else DOM.progWrap.classList.remove('warning-active');
+            if(percent === 100 && total > 0) DOM.clearOverlay.classList.add('show'); else DOM.clearOverlay.classList.remove('show');
+
+            DOM.undoCount.innerText = `${soldCount}개 판매됨`; DOM.undoList.innerHTML = '';
+            if(soldCount === 0) DOM.undoList.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">판매 기록이 없습니다.</div>';
+            else currentSoldOuts.forEach(num => {
+                const btn = document.createElement('button');
+                btn.className = "bg-slate-800 hover:bg-red-800 border border-slate-600 text-white text-[11px] px-2 py-1 rounded flex items-center gap-1 transition group";
+                btn.innerHTML = `<span class="text-red-400 group-hover:text-white">↺ 복구</span> <span class="font-bold ml-1">${num}</span>`;
+                btn.onclick = () => { const tw = document.querySelector(`.card-wrapper[data-number="${num}"]`); if(tw) handleCardClick(num, tw); };
+                DOM.undoList.appendChild(btn);
+            });
+        }
+
+        let timerInterval = null;
+        function tickTimer() {
+            if(!state.timer.isRunning) return;
+            state.timer.remaining = Math.max(0, Math.ceil((state.timer.targetEnd - Date.now()) / 1000));
+            renderTimerText(); if(state.timer.remaining <= 0) { clearInterval(timerInterval); state.timer.isRunning = false; }
+        }
+        function renderTimerText() {
+            const m = Math.floor(state.timer.remaining / 60).toString().padStart(2, '0'); const s = (state.timer.remaining % 60).toString().padStart(2, '0');
+            DOM.timerDisplay.innerText = `${m}:${s}`;
+            if(state.timer.remaining > 0 && state.timer.remaining <= 60) { DOM.timerBox.classList.add('border-red-500', 'bg-red-900/30'); DOM.timerDisplay.classList.add('text-red-500', 'animate-pulse'); } 
+            else { DOM.timerBox.classList.remove('border-red-500', 'bg-red-900/30'); DOM.timerDisplay.classList.remove('text-red-500', 'animate-pulse'); }
+        }
+
+        document.getElementById('btn-timer-start').addEventListener('click', () => {
+            if(state.timer.isRunning) { state.timer.isRunning = false; clearInterval(timerInterval); } 
+            else {
+                const m = parseInt(DOM.timerBoxMin.value)||0; const s = parseInt(DOM.timerBoxSec.value)||0;
+                if(state.timer.remaining <= 0) state.timer.remaining = m*60 + s;
+                state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true; timerInterval = setInterval(tickTimer, 200);
+            }
+        });
+        document.getElementById('btn-timer-reset').addEventListener('click', () => {
+            state.timer.isRunning = false; clearInterval(timerInterval);
+            state.timer.remaining = (parseInt(DOM.timerBoxMin.value)||0)*60 + (parseInt(DOM.timerBoxSec.value)||0); renderTimerText();
+        });
+
+        document.getElementById('btn-capture').addEventListener('click', () => {
+            const target = document.getElementById('viewer-container'); const ogBg = target.style.backgroundColor; target.style.backgroundColor = '#0f172a';
+            html2canvas(target, { backgroundColor: '#0f172a', scale: 1.5 }).then(canvas => {
+                const link = document.createElement('a'); link.download = `뽑기결과_${new Date().getTime()}.png`;
+                link.href = canvas.toDataURL(); link.click(); target.style.backgroundColor = ogBg;
+            });
+        });
+    </script>
+</body>
+</html>
