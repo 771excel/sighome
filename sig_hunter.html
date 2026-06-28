@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V8)</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V9)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -16,6 +16,9 @@
         
         body.viewer-mode #admin-panel { display: none !important; }
         body.viewer-mode #viewer-container { width: 100vw !important; max-width: 100vw !important; padding: 2rem !important; }
+
+        /* 로그 뷰어 모드 스타일 */
+        body.log-mode #admin-panel, body.log-mode #viewer-container { display: none !important; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
@@ -36,6 +39,7 @@
         .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
+        /* 이미지 비율 16:9 고정 및 텍스트 2줄 꽉참 처리 */
         .img-container { width: 100%; aspect-ratio: 16/9; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 2px solid #e2e8f0; }
         .text-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem; overflow: hidden; }
         
@@ -44,7 +48,7 @@
             font-size: clamp(16px, calc(100vh / var(--grid-rows) * 0.08), 34px); 
             line-height: 1.2; width: 100%; text-align: center; font-weight: 800;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; 
-            overflow: hidden; text-overflow: ellipsis; word-break: keep-all; 
+            overflow: hidden; text-overflow: ellipsis; word-break: keep-all; white-space: normal;
         }
 
         .vip-glow .card-front { border: 4px solid #fbbf24 !important; box-shadow: 0 0 20px rgba(251, 191, 36, 0.8) !important; animation: pulse-gold 2s infinite; }
@@ -52,18 +56,21 @@
 
         .card-wrapper.is-sold-out .card-front img { filter: grayscale(100%) brightness(0.4); }
         .card-wrapper.is-sold-out .text-container { background-color: #334155; color: #94a3b8; }
-        .sold-out-stamp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg); background: rgba(220, 38, 38, 0.95); color: white; font-size: 2.5rem; font-weight: 900; padding: 0.5rem 1.5rem; border-radius: 0.5rem; border: 3px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20; }
+        
+        /* 솔드아웃 한줄 꽉차게 수정 */
+        .sold-out-stamp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(1.5) rotate(-10deg); background: rgba(220, 38, 38, 0.95); color: white; font-size: 3rem; font-weight: 900; padding: 0.5rem 2rem; border-radius: 0.5rem; border: 4px solid white; box-shadow: 0 10px 25px rgba(0,0,0,0.6); opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; z-index: 20; white-space: nowrap; text-align: center; }
         .card-wrapper.is-sold-out .sold-out-stamp { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-5deg); }
 
         .card-wrapper.is-claimed .card-front img { filter: grayscale(0%) brightness(1); }
         .card-wrapper.is-claimed .card-front { border-color: #3b82f6 !important; box-shadow: 0 0 20px rgba(59,130,246, 0.8) !important; }
         .card-wrapper.is-claimed .sold-out-stamp { display: none !important; }
         
-        .claimed-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 30; border-radius: 0.75rem; }
+        .claimed-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 30; border-radius: 0.75rem; }
         .card-wrapper.is-claimed .claimed-overlay { opacity: 1; }
-        .claimed-badge { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 2px solid white; padding: 6px 20px; border-radius: 30px; font-weight: 900; color: white; box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-size: 1.8rem; text-align: center; margin-bottom: 10px; }
+        .claimed-badge { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: 3px solid white; padding: 8px 30px; border-radius: 30px; font-weight: 900; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.6); font-size: 2.2rem; text-align: center; margin-bottom: 15px; }
         
-        .multiplier-stamp { font-size: 4rem; font-weight: 900; color: #fbbf24; text-shadow: 2px 2px 0 #b45309, -2px -2px 0 #b45309, 2px -2px 0 #b45309, -2px 2px 0 #b45309, 0 5px 15px rgba(0,0,0,0.8); transform: scale(0) rotate(-20deg); opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        /* 배수 표시 리디자인 */
+        .multiplier-stamp { font-size: 5.5rem; font-weight: 900; color: #ffeb3b; text-shadow: 3px 3px 0 #d94a00, -3px -3px 0 #d94a00, 3px -3px 0 #d94a00, -3px 3px 0 #d94a00, 0 10px 20px rgba(0,0,0,0.8); filter: drop-shadow(0 0 10px rgba(255, 235, 59, 0.4)); transform: scale(0) rotate(-20deg); opacity: 0; transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
         .card-wrapper.is-revealed .multiplier-stamp { transform: scale(1) rotate(-10deg); opacity: 1; }
 
         @keyframes warning-blink { 0%, 100% { background-color: rgba(15, 23, 42, 0.8); border-color: rgba(255,255,255,0.1); } 50% { background-color: rgba(185, 28, 28, 0.7); border-color: #ef4444; } }
@@ -73,7 +80,7 @@
 
         .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; }
         .marquee-container.center-mode { justify-content: center; }
-        .marquee-content { display: flex; align-items: center; gap: 0.5rem; }
+        .marquee-content { display: flex; align-items: center; gap: 1rem; }
         .marquee-content.animate { animation: marquee 15s linear infinite; }
         @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 
@@ -85,10 +92,32 @@
 </head>
 <body class="flex w-full h-screen relative">
 
-    <!-- [좌측] 메인 뷰어 화면 (숨김 제어) -->
+    <div id="log-container" class="w-full h-full bg-slate-900 text-slate-200 overflow-y-auto hidden">
+        <div class="max-w-5xl mx-auto p-8">
+            <h1 class="text-3xl font-black text-white mb-2 flex items-center gap-3"><i class="ph-fill ph-list-magnifying-glass text-blue-500"></i> 실시간 방송 로그 뷰어</h1>
+            <p class="text-slate-400 mb-8 font-bold">진행된 솔드아웃, 배수, 멤버 획득 내역이 시간순으로 표시됩니다.</p>
+            
+            <div class="bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden">
+                <table class="w-full text-left text-sm whitespace-nowrap">
+                    <thead class="bg-slate-950 text-slate-400">
+                        <tr>
+                            <th class="p-4 font-bold border-b border-slate-700">시간</th>
+                            <th class="p-4 font-bold border-b border-slate-700">단계</th>
+                            <th class="p-4 font-bold border-b border-slate-700">번호</th>
+                            <th class="p-4 font-bold border-b border-slate-700">획득 멤버</th>
+                            <th class="p-4 font-bold border-b border-slate-700">배수</th>
+                            <th class="p-4 font-bold border-b border-slate-700">상태</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-tbody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div id="viewer-container" class="flex-1 relative flex flex-col justify-between gap-4 p-6 overflow-hidden transition-all duration-300">
         
-        <!-- 관리자 화면에서만 보이는 숨김 경고창 -->
         <div id="admin-viewer-hidden-warning" class="absolute inset-0 bg-black/60 z-[100] hidden flex-col items-center justify-center backdrop-blur-sm pointer-events-none">
             <i class="ph-fill ph-eye-slash text-6xl text-red-500 mb-4 animate-pulse"></i>
             <div class="bg-red-600 text-white font-black px-8 py-4 rounded-2xl text-2xl shadow-2xl border-4 border-red-800 text-center">
@@ -108,8 +137,8 @@
                 </div>
             </div>
 
-            <div id="survival-marquee-wrapper" class="glass-panel p-4 rounded-xl w-[700px] hidden flex-col justify-center shadow-xl border-yellow-500/50 h-full overflow-hidden">
-                <div class="text-white font-bold text-[13px] mb-1 text-center text-yellow-400">🔥 생존 게임 - 현재 도전 중인 멤버 🔥</div>
+            <div id="survival-marquee-wrapper" class="glass-panel p-4 rounded-xl w-[800px] hidden flex-col justify-center shadow-xl border-yellow-500/50 h-full overflow-hidden">
+                <div class="text-white font-bold text-sm mb-1 text-center text-yellow-400 tracking-widest">🔥 생존 게임 - 현재 도전 중인 멤버 🔥</div>
                 <div id="marquee-container" class="marquee-container flex-1">
                     <div id="marquee-text" class="marquee-content"></div>
                 </div>
@@ -146,7 +175,6 @@
     </div>
 
 
-    <!-- [우측] 관리자 패널 -->
     <div id="admin-panel" class="w-[550px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
@@ -182,6 +210,7 @@
             <div class="p-3 flex justify-between items-center">
                 <h2 class="text-lg font-black text-white">⚙️ 방송 관리자 패널</h2>
                 <div class="flex gap-2">
+                    <button id="btn-open-log" class="bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition">📝 로그 뷰어</button>
                     <button id="btn-toggle-viewer" class="bg-yellow-500 hover:bg-yellow-400 text-black text-[11px] font-black px-3 py-1.5 rounded shadow transition">👁️ 뷰어 숨기기</button>
                     <button id="btn-copy-link" class="bg-green-600 hover:bg-green-500 text-white text-[11px] font-bold px-3 py-1.5 rounded shadow transition">🔗 링크 복사</button>
                 </div>
@@ -257,7 +286,6 @@
                 </div>
             </div>
 
-            <!-- 강력한 Undo (솔드아웃 복구) 패널 강조 -->
             <div class="bg-slate-800 p-4 rounded-xl border border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)] relative overflow-hidden">
                 <div class="absolute inset-0 bg-red-900/10 pointer-events-none"></div>
                 <div class="flex justify-between items-center mb-2 relative z-10">
@@ -265,7 +293,7 @@
                     <span id="undo-count" class="text-[11px] text-red-300 font-bold bg-slate-900 px-2 py-0.5 rounded border border-red-800">0개 기록됨</span>
                 </div>
                 <p class="text-[10px] text-slate-400 mb-3 relative z-10 leading-tight">송출 중인 화면에서 잘못 클릭된 카드를 누르면 즉시 이전 상태로 되돌립니다.</p>
-                <div id="undo-list-container" class="flex flex-wrap gap-1.5 min-h-[40px] max-h-[120px] overflow-y-auto bg-slate-900 p-2 rounded border border-slate-700 custom-scroll relative z-10">
+                <div id="undo-list-container" class="flex flex-col gap-1.5 min-h-[40px] max-h-[120px] overflow-y-auto bg-slate-900 p-2 rounded border border-slate-700 custom-scroll relative z-10">
                     <div class="text-xs text-slate-600 w-full text-center py-2">판매/획득 기록이 없습니다.</div>
                 </div>
             </div>
@@ -281,20 +309,23 @@
             </div>
 
             <div class="bg-slate-800 p-3 rounded-xl border border-pink-500/50 shadow-sm">
-                <label class="block text-xs font-bold text-pink-400 mb-2">🎲 배수 분배 규칙 (동시 적용 가능)</label>
-                <div class="bg-slate-900 p-2 rounded border border-slate-700 flex flex-col gap-2">
-                    <div class="flex flex-col mb-1 border-b border-slate-700 pb-2">
+                <label class="block text-xs font-bold text-pink-400 mb-2">🎲 랜덤 배수 분배 규칙 (동시 적용 가능)</label>
+                <div class="bg-slate-900 p-2 rounded border border-slate-700 flex flex-col gap-3">
+                    <div class="flex flex-col border-b border-slate-700 pb-3">
                         <label class="text-[11px] text-slate-300 font-bold mb-1">1. 특정 배수 고정 개수 할당</label>
-                        <input type="text" id="multi-exact-str" class="admin-input w-full text-[10px] py-1" placeholder="예: 5배:2, 3배:1 (입력 안하면 무시)">
+                        <input type="text" id="multi-exact-str" class="admin-input w-full text-[10px] py-1" placeholder="예: 3배:1, 2배:3 (입력 안하면 무시)">
                     </div>
                     <div class="flex flex-col mb-1">
-                        <label class="text-[11px] text-slate-300 font-bold mb-1">2. 나머지 카드 배수 랜덤 범위</label>
+                        <label class="flex items-center gap-2 cursor-pointer mb-2">
+                            <input type="checkbox" id="use-random-rest" class="accent-pink-500 w-4 h-4">
+                            <span class="text-[11px] text-slate-300 font-bold">2. 나머지 카드 배수 랜덤 범위 적용 (비활성화 시 1배)</span>
+                        </label>
                         <div class="flex items-center gap-2">
                             <span class="text-[10px] text-slate-400">최소</span><input type="number" id="multi-min" class="admin-input w-12 py-0.5 px-0" value="1">
                             <span class="text-[10px] text-slate-400">~ 최대</span><input type="number" id="multi-max" class="admin-input w-12 py-0.5 px-0" value="5">
                         </div>
                     </div>
-                    <button id="btn-apply-global-multi" class="w-full bg-pink-600 hover:bg-pink-500 text-white text-[10px] font-bold py-1.5 rounded mt-1">현재 대기목록 전체에 규칙 혼합 적용</button>
+                    <button id="btn-apply-global-multi" class="w-full bg-pink-600 hover:bg-pink-500 text-white text-[10px] font-bold py-1.5 rounded mt-1">현재 설정된 모든 단계(대기목록)에 일괄 적용</button>
                 </div>
             </div>
 
@@ -309,7 +340,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -323,24 +353,26 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v8');
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v9'); // V9
 
         window.syncToCloud = async (stateObj) => {
-            if(!window.isViewerMode && window.isFirebaseReady) {
+            if(!window.isViewerMode && !window.isLogMode && window.isFirebaseReady) {
                 try { await setDoc(window.stateDocRef, stateObj, {merge: false}); } catch(e) { console.error(e); }
             }
         };
 
         signInAnonymously(auth).then(async () => {
-            if (!window.isViewerMode) {
+            // [어드민] 초기 로드
+            if (!window.isViewerMode && !window.isLogMode) {
                 try {
                     const docSnap = await getDoc(window.stateDocRef);
                     if (docSnap.exists()) {
                         const cloudState = docSnap.data();
                         if (cloudState.timer) cloudState.timer.isRunning = false;
                         window.state = { ...window.state, ...cloudState };
+                        if(!window.state.actionLogs) window.state.actionLogs = [];
                     } else {
-                        const saved = localStorage.getItem('sigHunterState_v8');
+                        const saved = localStorage.getItem('sigHunterState_v9');
                         if (saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                     }
                 } catch(e) { console.error("Cloud state load error", e); }
@@ -348,25 +380,33 @@
                 window.initAdminUI();
             }
 
+            // DB 시그니처 로드
             onSnapshot(doc(db, 'signature_boards', 'main_board_data'), (snapshot) => {
                 if (snapshot.exists() && snapshot.data().itemConfigs) {
                     window.firebaseItems = snapshot.data().itemConfigs; window.isFirebaseReady = true;
-                    document.getElementById('db-status-badge').innerText = `🟢 캐시/DB 동기화 됨 (${window.firebaseItems.length}개)`;
+                    if(!window.isLogMode) document.getElementById('db-status-badge').innerText = `🟢 캐시/DB 동기화 됨 (${window.firebaseItems.length}개)`;
                     
-                    if(!window.isViewerMode && window.state && window.state.currentBroadcastStageId) {
+                    if(!window.isViewerMode && !window.isLogMode && window.state && window.state.currentBroadcastStageId) {
                         window.updateViewerStateOnly(); 
-                        if(!window.isViewerMode) window.renderAdminStages();
+                        window.renderAdminStages();
                     }
                 }
             });
 
-            if (window.isViewerMode) {
+            // [뷰어 & 로그모드] 원격 제어 수신
+            if (window.isViewerMode || window.isLogMode) {
                 onSnapshot(window.stateDocRef, (docSnap) => {
                     if (docSnap.exists()) {
                         const cloudState = docSnap.data();
                         const prevTimestamp = window.state.broadcastTimestamp;
                         window.state = { ...window.state, ...cloudState };
+                        if(!window.state.actionLogs) window.state.actionLogs = [];
                         
+                        if(window.isLogMode) {
+                            window.renderLogViewer();
+                            return;
+                        }
+
                         document.documentElement.style.setProperty('--grid-cols', state.cols);
                         document.documentElement.style.setProperty('--grid-rows', state.rows);
                         window.updateBannerUI();
@@ -400,7 +440,13 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         window.isViewerMode = urlParams.get('viewer') === 'true';
+        window.isLogMode = urlParams.get('log') === 'true';
+        
         if (window.isViewerMode) document.body.classList.add('viewer-mode');
+        if (window.isLogMode) {
+            document.body.classList.add('log-mode');
+            document.getElementById('log-container').classList.replace('hidden', 'block');
+        }
 
         function showModal(msg, isConfirm = false, onConfirm = null) {
             const m = document.getElementById('custom-modal'); const b = document.getElementById('custom-modal-btns');
@@ -417,6 +463,7 @@
             "cols": 5, "rows": 2, "bannerText": "시그헌터 목록 (별풍점수 2배)",
             "timer": { "remaining": 600, "isRunning": false, "targetEnd": null },
             "globalSoldOutList": [],
+            "actionLogs": [],
             "currentBroadcastStageId": "st_1",
             "stages": [
                 { "id": "st_1", "name": "01단계", "min": 1000, "max": 1499, "count": 10, "mandatory": "", "high": 0, "timerMin": 10, "timerSec": 0, "previewNumbers": [1008,1011,1044,1082,1088,1152,1182,1297,1298,1299], "broadcastNumbers": [1008,1011,1044,1082,1088,1152,1182,1297,1298,1299] },
@@ -467,10 +514,54 @@
         };
 
         function saveState() {
-            if (window.isViewerMode) return;
-            localStorage.setItem('sigHunterState_v8', JSON.stringify(state)); 
+            if (window.isViewerMode || window.isLogMode) return;
+            localStorage.setItem('sigHunterState_v9', JSON.stringify(state)); 
             if(window.syncToCloud) window.syncToCloud(state); 
         }
+
+        // --- 취소/복구 시 로그 상태 변경 ---
+        function cancelLog(num) {
+            if(!state.actionLogs) return;
+            // 가장 최근의 활성화된 해당 번호 로그를 찾아서 취소 처리
+            for(let i = state.actionLogs.length - 1; i >= 0; i--) {
+                if(state.actionLogs[i].sigNum === num && state.actionLogs[i].status === 'active') {
+                    state.actionLogs[i].status = 'canceled';
+                    break;
+                }
+            }
+        }
+
+        // --- 실시간 로그 뷰어 렌더링 ---
+        window.renderLogViewer = function() {
+            if(!window.isLogMode) return;
+            const tbody = document.getElementById('log-tbody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            
+            if(!state.actionLogs || state.actionLogs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-500 font-bold">기록된 이벤트가 없습니다.</td></tr>';
+                return;
+            }
+
+            // 최신 기록이 위로 오게 역순 출력
+            [...state.actionLogs].reverse().forEach(log => {
+                const isCanceled = log.status === 'canceled';
+                const tr = document.createElement('tr');
+                tr.className = `border-b border-slate-700 ${isCanceled ? 'bg-slate-800/50 text-slate-500' : 'text-slate-200 hover:bg-slate-800/80 transition-colors'}`;
+                
+                tr.innerHTML = `
+                    <td class="p-4 ${isCanceled ? 'line-through' : ''}">${log.time}</td>
+                    <td class="p-4 font-bold ${isCanceled ? 'line-through' : 'text-emerald-400'}">${log.stageName}</td>
+                    <td class="p-4 font-black ${isCanceled ? 'text-slate-600 line-through' : 'text-yellow-400'}">${log.sigNum}</td>
+                    <td class="p-4 font-bold ${isCanceled ? 'text-slate-600 line-through' : 'text-blue-300'}">${log.member}</td>
+                    <td class="p-4 font-black text-lg ${isCanceled ? 'text-slate-600 line-through' : 'text-pink-400'}">${log.multi === '-' ? '-' : log.multi + '배'}</td>
+                    <td class="p-4 font-bold ${isCanceled ? 'text-red-500' : 'text-white'}">
+                        ${isCanceled ? '<span class="bg-red-500/20 px-2 py-1 rounded">취소/복구됨</span>' : '<span class="bg-blue-500/20 px-2 py-1 rounded">정상 획득</span>'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
 
         // --- 뷰어 숨기기 ---
         window.updateViewerVisibilityUI = function() {
@@ -481,30 +572,40 @@
                     vc.style.opacity = '0'; // OBS 화면 완전히 투명화
                 } else {
                     vc.style.opacity = '1';
-                    adminWarning.classList.replace('hidden', 'flex'); // 관리자 패널 경고창
-                    document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 표시하기';
-                    document.getElementById('btn-toggle-viewer').classList.replace('bg-yellow-500', 'bg-red-500');
-                    document.getElementById('btn-toggle-viewer').classList.replace('hover:bg-yellow-400', 'hover:bg-red-400');
+                    if(adminWarning) adminWarning.classList.replace('hidden', 'flex'); 
+                    const btn = document.getElementById('btn-toggle-viewer');
+                    if(btn) {
+                        btn.innerText = '👁️ 뷰어 표시하기';
+                        btn.classList.replace('bg-yellow-500', 'bg-red-500');
+                        btn.classList.replace('hover:bg-yellow-400', 'hover:bg-red-400');
+                    }
                 }
             } else {
                 vc.style.opacity = '1';
                 if(!window.isViewerMode) {
-                    adminWarning.classList.replace('flex', 'hidden');
-                    document.getElementById('btn-toggle-viewer').innerText = '👁️ 뷰어 숨기기';
-                    document.getElementById('btn-toggle-viewer').classList.replace('bg-red-500', 'bg-yellow-500');
-                    document.getElementById('btn-toggle-viewer').classList.replace('hover:bg-red-400', 'hover:bg-yellow-400');
+                    if(adminWarning) adminWarning.classList.replace('flex', 'hidden');
+                    const btn = document.getElementById('btn-toggle-viewer');
+                    if(btn) {
+                        btn.innerText = '👁️ 뷰어 숨기기';
+                        btn.classList.replace('bg-red-500', 'bg-yellow-500');
+                        btn.classList.replace('hover:bg-red-400', 'hover:bg-yellow-400');
+                    }
                 }
             }
         }
 
-        if(!window.isViewerMode) {
+        if(!window.isViewerMode && !window.isLogMode) {
             document.getElementById('btn-toggle-viewer').addEventListener('click', () => {
                 state.isViewerHidden = !state.isViewerHidden; saveState(); window.updateViewerVisibilityUI();
             });
 
+            document.getElementById('btn-open-log').addEventListener('click', () => {
+                window.open(window.location.href.split('?')[0] + '?log=true', '_blank');
+            });
+
             document.getElementById('new-game-btn').addEventListener('click', () => {
                 showModal("솔드아웃 및 획득 기록을 포함한 전체 진행 상태를 리셋하시겠습니까?", true, () => {
-                    state.globalSoldOutList = []; state.claimedCards = {}; state.revealedCards = []; state.currentBroadcastStageId = null;
+                    state.globalSoldOutList = []; state.claimedCards = {}; state.revealedCards = []; state.currentBroadcastStageId = null; state.actionLogs = [];
                     document.getElementById('empty-state-msg').style.display = 'flex';
                     document.getElementById('card-grid').innerHTML = '';
                     document.getElementById('banner-wrapper').classList.add('hidden');
@@ -545,6 +646,7 @@
                 r.onload = ev => { 
                     try { 
                         state = {...state, ...JSON.parse(ev.target.result)}; 
+                        if(!state.actionLogs) state.actionLogs = [];
                         saveState(); 
                         window.initAdminUI();
                         showModal("✅ 파일을 불러와 설정 및 클라우드 동기화가 완료되었습니다.");
@@ -581,13 +683,12 @@
             });
         }
 
-        // 배너 텍스트 업데이트 (단계 강조 축소)
+        // 배너 텍스트 업데이트 (자연스러운 뱃지 디자인)
         window.updateBannerUI = function() {
             const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
             const textSpan = `<span>${state.bannerText}</span>`;
             if (stage) {
-                // 강조 태그의 사이즈와 두께를 조정
-                document.getElementById('banner-text').innerHTML = `<span class="text-white bg-red-600 px-3 py-1 rounded-xl mr-3 border-2 border-red-800 shadow-md inline-block text-3xl align-middle -translate-y-1">[ ${stage.name} ]</span>${textSpan}`;
+                document.getElementById('banner-text').innerHTML = `<span class="text-yellow-900 bg-yellow-400 px-4 py-1 rounded-full mr-3 border-2 border-yellow-600 shadow-sm inline-block text-[2rem] align-middle -translate-y-1 font-black">${stage.name}</span>${textSpan}`;
             } else {
                 document.getElementById('banner-text').innerHTML = textSpan;
             }
@@ -617,29 +718,28 @@
         window.removeMember = (m) => { state.members = state.members.filter(x => x !== m); state.eliminatedMembers = state.eliminatedMembers.filter(x => x !== m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
         window.toggleSurvival = (m) => { if(state.eliminatedMembers.includes(m)) state.eliminatedMembers = state.eliminatedMembers.filter(x=>x!==m); else state.eliminatedMembers.push(m); saveState(); renderMembers(); window.updateViewerStateOnly(); };
 
-        // --- 관리자 단계 렌더링 (대기목록 상세 내역 추가) ---
+        // --- 관리자 단계 렌더링 (대기목록 상세 내역 텍스트 확대 및 구조개선) ---
         function renderAdminStages() {
-            if(window.isViewerMode) return;
+            if(window.isViewerMode || window.isLogMode) return;
             const container = document.getElementById('stages-container'); container.innerHTML = '';
             state.stages.forEach(stage => {
                 const isBroadcasting = state.currentBroadcastStageId === stage.id;
                 const div = document.createElement('div');
                 div.className = `bg-slate-800 p-3 rounded-lg border ${isBroadcasting ? 'border-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'border-slate-700'} relative transition-all`;
                 
-                // 대기목록 상세 태그 생성
                 const previewTags = stage.previewNumbers.length > 0 
                     ? stage.previewNumbers.map(n => {
                         const multi = state.multipliers[n] || 1;
                         const fbItem = window.firebaseItems.find(i => i.id === n);
                         const name = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름없음';
                         return `
-                            <div class="bg-slate-700 border border-slate-600 rounded px-1.5 py-1 flex justify-between items-center gap-1">
-                                <span class="text-yellow-300 font-bold whitespace-nowrap">${n}</span>
-                                <span class="text-slate-300 truncate w-14 text-[9px]">${name}</span>
-                                <span class="text-pink-400 font-bold whitespace-nowrap">${multi}배</span>
+                            <div class="bg-slate-700 border border-slate-600 rounded px-2 py-1.5 flex justify-between items-center gap-2">
+                                <span class="text-yellow-300 font-bold text-xs">${n}</span>
+                                <span class="text-white truncate flex-1 text-xs text-left">${name}</span>
+                                <span class="text-pink-400 font-black text-xs">${multi}배</span>
                             </div>`;
                     }).join('') 
-                    : '<div class="text-slate-500 font-bold px-1 py-0.5 col-span-2">대기목록 없음</div>';
+                    : '<div class="text-slate-500 font-bold px-2 py-1 col-span-2">대기목록 없음</div>';
 
                 div.innerHTML = `
                     <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-700 cursor-move handle">
@@ -663,7 +763,7 @@
                             <span class="text-[10px] text-slate-400">대기목록 상세 (총 ${stage.previewNumbers.length}개)</span>
                             <button class="bg-indigo-600 text-white text-[9px] font-bold px-2 py-1 rounded shadow hover:bg-indigo-500 whitespace-nowrap" onclick="openPreviewPopup('${stage.id}')">🔍 크게보기/수동설정</button>
                         </div>
-                        <div class="grid grid-cols-2 gap-1 mt-1 text-[10px] max-h-24 overflow-y-auto custom-scroll pr-1">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-2 max-h-32 overflow-y-auto custom-scroll pr-1">
                             ${previewTags}
                         </div>
                     </div>
@@ -688,14 +788,14 @@
             saveState();
         };
 
-        // --- 랜덤 뽑기 및 배수 규칙 동시 적용 ---
+        // --- 랜덤 배수 분배 규칙 ---
         function applyMultiplierRule(stage) {
             if(stage.previewNumbers.length === 0) return;
             
             let multiPool = [];
             const ruleStr = document.getElementById('multi-exact-str').value;
+            const useRandomRest = document.getElementById('use-random-rest').checked;
             
-            // 1. 특정 배수 할당 적용
             if(ruleStr.trim()) {
                 ruleStr.split(',').forEach(part => {
                     const [multi, count] = part.split(':').map(n => parseInt(n.trim()));
@@ -706,12 +806,15 @@
             const min = parseInt(document.getElementById('multi-min').value) || 1;
             const max = parseInt(document.getElementById('multi-max').value) || 1;
             
-            // 2. 남은 자리를 랜덤 범위로 채우기
+            // 나머지 카드 채우기
             while(multiPool.length < stage.previewNumbers.length) {
-                multiPool.push(Math.floor(Math.random() * (max - min + 1)) + min);
+                if (useRandomRest) {
+                    multiPool.push(Math.floor(Math.random() * (max - min + 1)) + min);
+                } else {
+                    multiPool.push(1); // 체크 해제 시 1배 고정
+                }
             }
             
-            // 섞기
             multiPool.sort(() => Math.random() - 0.5);
             stage.previewNumbers.forEach((n, i) => state.multipliers[n] = multiPool[i] || 1);
         }
@@ -732,13 +835,11 @@
             
             stage.previewNumbers = [...new Set(drawn)].sort((a,b)=>a-b);
             
-            // 룰 기반 배수 자동 적용
             applyMultiplierRule(stage);
-            
             saveState(); renderAdminStages();
         }
 
-        if(!window.isViewerMode) {
+        if(!window.isViewerMode && !window.isLogMode) {
             document.getElementById('batch-generate-btn').addEventListener('click', () => {
                 if (!window.isFirebaseReady) return showModal("DB 연동 대기중입니다.");
                 showModal("전체 단계 목록을 랜덤 생성하시겠습니까?", true, () => { state.stages.forEach(s => executeStageRandom(s.id)); showModal("일괄 생성 완료!"); });
@@ -752,7 +853,7 @@
             currentPreviewStageId = id; document.getElementById('popup-title').innerText = `${stage.name} 설정`;
             document.getElementById('preview-popup').classList.replace('hidden', 'flex'); renderPreviewCards();
         }
-        if(!window.isViewerMode) {
+        if(!window.isViewerMode && !window.isLogMode) {
             document.getElementById('close-popup-btn').addEventListener('click', () => { document.getElementById('preview-popup').classList.replace('flex', 'hidden'); currentPreviewStageId = null; });
             document.getElementById('popup-apply-nums-btn').addEventListener('click', () => {
                 const stage = state.stages.find(s => s.id === currentPreviewStageId); if(!stage) return;
@@ -835,7 +936,7 @@
                 wrapper.className = `card-wrapper cursor-pointer w-full h-full relative ${isVIP ? 'vip-glow' : ''} ${isSoldOut ? 'is-sold-out' : ''} ${isClaimed ? 'is-claimed' : ''} ${isRevealed ? 'is-revealed' : ''}`;
                 wrapper.dataset.number = num; 
                 
-                if(!window.isViewerMode) wrapper.onclick = () => handleCardClick(num, wrapper);
+                if(!window.isViewerMode && !window.isLogMode) wrapper.onclick = () => handleCardClick(num, wrapper);
 
                 wrapper.innerHTML = `
                     <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
@@ -864,11 +965,11 @@
                 clearInterval(window.timerInterval);
                 const tMin = stage.timerMin || 10; const tSec = stage.timerSec || 0;
                 state.timer.remaining = tMin * 60 + tSec; state.timer.targetEnd = Date.now() + (state.timer.remaining * 1000); state.timer.isRunning = true;
-                if(!window.isViewerMode) { document.getElementById('timer-min').value = tMin; document.getElementById('timer-sec').value = tSec; updateTimerBtnUI(); }
+                if(!window.isViewerMode && !window.isLogMode) { document.getElementById('timer-min').value = tMin; document.getElementById('timer-sec').value = tSec; updateTimerBtnUI(); }
                 window.timerInterval = setInterval(window.tickTimer, 200); window.renderTimerText();
                 saveState();
             }
-            if(!window.isViewerMode) renderAdminStages(); 
+            if(!window.isViewerMode && !window.isLogMode) renderAdminStages(); 
             window.updateViewerStateOnly(); 
             window.updateViewerVisibilityUI();
         }
@@ -926,7 +1027,8 @@
                     marqueeText.classList.remove('animate');
                     marqueeContainer.classList.add('center-mode');
                 } else {
-                    marqueeText.innerHTML = survivors.map(m => `<span class="inline-block bg-slate-800 border-2 border-yellow-400 text-yellow-300 px-4 py-1.5 rounded-xl shadow-[0_0_10px_rgba(250,204,21,0.6)] animate-pulse">${m}</span>`).join('');
+                    // 글자 크기를 키우고 두껍게
+                    marqueeText.innerHTML = survivors.map(m => `<span class="inline-block bg-slate-800 border-2 border-yellow-400 text-yellow-300 px-6 py-2 rounded-2xl shadow-[0_0_15px_rgba(250,204,21,0.6)] animate-pulse text-2xl font-black tracking-wider">${m}</span>`).join('');
                     
                     if(survivors.length <= 5) {
                         marqueeText.classList.remove('animate');
@@ -938,11 +1040,11 @@
                 }
             }
 
-            // 관리자 패널의 Undo(솔드아웃 복구) 리스트 갱신
-            if(!window.isViewerMode) {
+            // 관리자 패널의 Undo(솔드아웃 복구) 리스트 강제 갱신
+            if(!window.isViewerMode && !window.isLogMode) {
                 const ul = document.getElementById('undo-list-container'); ul.innerHTML = '';
                 document.getElementById('undo-count').innerText = `${soldCount}개 기록됨`;
-                if(soldCount === 0) ul.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">판매 기록이 없습니다.</div>';
+                if(soldCount === 0) ul.innerHTML = '<div class="text-xs text-slate-600 w-full text-center py-2">판매/획득 기록이 없습니다.</div>';
                 else {
                     stage.broadcastNumbers.filter(n => state.globalSoldOutList.includes(n) || state.claimedCards[n]).forEach(num => {
                         const claimTxt = state.claimedCards[num] ? `<span class="text-blue-400">(${state.claimedCards[num]})</span>` : '';
@@ -953,6 +1055,7 @@
                             state.globalSoldOutList = state.globalSoldOutList.filter(n=>n!==num); 
                             delete state.claimedCards[num]; 
                             state.revealedCards = state.revealedCards.filter(n=>n!==num);
+                            cancelLog(num); // 취소 로그 반영
                             saveState(); window.updateViewerStateOnly(); 
                         };
                         ul.appendChild(btn);
@@ -961,29 +1064,45 @@
             }
         }
 
-        // --- 클릭 제어 ---
+        // --- 클릭 사이클 제어 ---
         let pendingClaimNum = null; 
         function handleCardClick(num, wrapperElement) {
             const isSold = state.globalSoldOutList.includes(num); 
             const isClaimed = !!state.claimedCards[num];
             const isRevealed = state.revealedCards.includes(num);
+            const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
+            const sName = stage ? stage.name : '알수없음';
+            const nowTime = new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
             if (state.gameMode === 'standard') {
-                if (!isSold) state.globalSoldOutList.push(num);
-                else state.globalSoldOutList = state.globalSoldOutList.filter(n => n !== num);
+                if (!isSold) {
+                    state.globalSoldOutList.push(num);
+                    state.actionLogs.push({ id: Date.now(), time: nowTime, stageName: sName, sigNum: num, member: '-', multi: '-', status: 'active' });
+                } else {
+                    state.globalSoldOutList = state.globalSoldOutList.filter(n => n !== num);
+                    cancelLog(num);
+                }
             } 
             else if (state.gameMode === 'hunter') {
-                if (!isSold && !isClaimed) { state.globalSoldOutList.push(num); } 
-                else if (isSold && !isClaimed) { openMemberModal(num); return; } 
-                else if (isClaimed && !isRevealed) { state.revealedCards.push(num); } 
-                else {
+                if (!isSold && !isClaimed) { 
+                    state.globalSoldOutList.push(num); 
+                } else if (isSold && !isClaimed) { 
+                    openMemberModal(num); return; 
+                } else if (isClaimed && !isRevealed) { 
+                    state.revealedCards.push(num); 
+                } else {
                     state.globalSoldOutList = state.globalSoldOutList.filter(n => n !== num);
                     delete state.claimedCards[num]; state.revealedCards = state.revealedCards.filter(n => n !== num);
+                    cancelLog(num);
                 }
             } 
             else if (state.gameMode === 'survival') {
-                if (!isClaimed) { openMemberModal(num, true); return; } 
-                else { delete state.claimedCards[num]; }
+                if (!isClaimed) { 
+                    openMemberModal(num, true); return; 
+                } else { 
+                    delete state.claimedCards[num];
+                    cancelLog(num);
+                }
             }
             saveState(); window.updateViewerStateOnly();
         }
@@ -1002,7 +1121,25 @@
         window.assignMember = function(member) {
             if(!pendingClaimNum) return;
             state.claimedCards[pendingClaimNum] = member;
-            if(state.gameMode === 'hunter' && !state.globalSoldOutList.includes(pendingClaimNum)) state.globalSoldOutList.push(pendingClaimNum);
+            if(state.gameMode === 'hunter' && !state.globalSoldOutList.includes(pendingClaimNum)) {
+                state.globalSoldOutList.push(pendingClaimNum);
+            }
+            
+            // 로그 추가
+            const stage = state.stages.find(s => s.id === state.currentBroadcastStageId);
+            const sName = stage ? stage.name : '알수없음';
+            const nowTime = new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            state.actionLogs.push({ 
+                id: Date.now(), 
+                time: nowTime, 
+                stageName: sName, 
+                sigNum: pendingClaimNum, 
+                member: member, 
+                multi: state.gameMode === 'hunter' ? (state.multipliers[pendingClaimNum] || 1) : '-', 
+                status: 'active' 
+            });
+
             closeMemberModal(); saveState(); window.updateViewerStateOnly();
         }
         window.closeMemberModal = function() { document.getElementById('member-select-modal').classList.replace('flex', 'hidden'); pendingClaimNum = null; }
@@ -1018,7 +1155,7 @@
             if(!state.timer.isRunning) return;
             state.timer.remaining = Math.max(0, Math.ceil((state.timer.targetEnd - Date.now()) / 1000));
             window.renderTimerText(); 
-            if(state.timer.remaining <= 0) { clearInterval(window.timerInterval); state.timer.isRunning = false; if(!window.isViewerMode) { updateTimerBtnUI(); saveState(); } }
+            if(state.timer.remaining <= 0) { clearInterval(window.timerInterval); state.timer.isRunning = false; if(!window.isViewerMode && !window.isLogMode) { updateTimerBtnUI(); saveState(); } }
         }
         window.renderTimerText = function() {
             const m = Math.floor(state.timer.remaining / 60).toString().padStart(2, '0'); const s = (state.timer.remaining % 60).toString().padStart(2, '0');
@@ -1028,7 +1165,7 @@
             else { tb.classList.remove('border-red-500', 'bg-red-900/30'); td.classList.remove('text-red-500', 'animate-pulse'); }
         }
 
-        if(!window.isViewerMode) {
+        if(!window.isViewerMode && !window.isLogMode) {
             document.getElementById('btn-timer-start').addEventListener('click', () => {
                 if(state.timer.isRunning) { state.timer.isRunning = false; clearInterval(window.timerInterval); } 
                 else {
