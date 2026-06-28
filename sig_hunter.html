@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V12)</title>
+    <title>시그헌터/생존게임 통합 뷰어 By. JIN (V13)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://webfontworld.github.io/gmarket/GmarketSans.css" rel="stylesheet">
@@ -27,7 +27,7 @@
         
         #card-grid {
             display: grid; grid-template-columns: repeat(var(--grid-cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--grid-rows), minmax(0, 1fr));
-            gap: 0.8rem; transition: all 0.5s ease; height: 100%;
+            gap: 0.8rem; transition: all 0.5s ease; height: 100%; min-height: 0;
         }
         
         .perspective-1000 { perspective: 1000px; }
@@ -35,17 +35,20 @@
         .card-inner.is-flipped { transform: rotateY(180deg); }
         .card-front, .card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 0.75rem; overflow: hidden; }
         
-        .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        /* 반응형 스케일링을 위한 컨테이너 쿼리 */
+        .card-front { background: white; display: flex; flex-direction: column; border: 3px solid #cbd5e1; box-shadow: 0 4px 10px rgba(0,0,0,0.3); container-type: inline-size; }
         .card-back { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 3px solid #475569; transform: rotateY(180deg); display: flex; align-items: center; justify-content: center; }
 
-        .img-container { width: 100%; aspect-ratio: 16/9; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 3px solid #cbd5e1; }
-        .text-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem 0.8rem; overflow: hidden; width: 100%; }
+        /* 이미지 비율 고정(60%), 텍스트(40%) */
+        .img-container { width: 100%; height: 60%; background: #0f172a; flex-shrink: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-bottom: 3px solid #cbd5e1; }
+        .text-container { flex: 1; height: 40%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #f1f5f9; padding: 0.4rem 0.8rem; overflow: hidden; width: 100%; }
         
-        .sig-id { font-size: clamp(24px, calc(100vh / var(--grid-rows) * 0.12), 48px); margin-bottom: 2px; line-height: 1; font-weight: 900; color: #dc2626; text-shadow: 1px 1px 0px rgba(0,0,0,0.1); }
+        /* 반응형 텍스트 크기 조정 (cqi 기반) */
+        .sig-id { font-size: clamp(10px, 9cqi, 40px); margin-bottom: 2px; line-height: 1; font-weight: 900; color: #dc2626; text-shadow: 1px 1px 0px rgba(0,0,0,0.1); }
         
-        .sig-name-container { container-type: inline-size; width: 100%; overflow: hidden; white-space: nowrap; display: flex; justify-content: center; align-items: center; }
+        .sig-name-container { width: 100%; overflow: hidden; white-space: nowrap; display: flex; justify-content: center; align-items: center; }
         .sig-name-text { 
-            font-size: clamp(16px, calc(100vh / var(--grid-rows) * 0.075), 32px); 
+            font-size: clamp(12px, 12cqi, 36px); 
             line-height: 1.2; font-weight: 900; display: inline-block; color: #1e293b; letter-spacing: -0.5px;
         }
         .sig-name-text.is-scrolling { animation: scroll-text 4s linear infinite alternate; }
@@ -81,11 +84,12 @@
         #stage-clear-overlay { opacity: 0; pointer-events: none; transform: scale(0.9); transition: all 0.8s; }
         #stage-clear-overlay.show { opacity: 1; transform: scale(1); pointer-events: auto; }
 
-        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; }
+        /* 생존게임 전광판 개선 (컨테이너 쿼리 지원) */
+        .marquee-container { width: 100%; overflow: hidden; white-space: nowrap; position: relative; display: flex; align-items: center; justify-content: flex-start; container-type: inline-size; }
         .marquee-container.center-mode { justify-content: center; }
         .marquee-content { display: flex; align-items: center; gap: 1.5rem; }
-        .marquee-content.animate { animation: marquee 15s linear infinite; }
-        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        .marquee-content.animate { animation: marquee linear infinite; }
+        @keyframes marquee { 0% { transform: translateX(100cqi); } 100% { transform: translateX(-100%); } }
 
         #admin-panel { background-color: #0f172a; }
         .admin-input { background: #1e293b; color: white; border: 1px solid #475569; border-radius: 0.25rem; outline: none; padding: 0.25rem; font-size: 0.875rem; text-align: center; transition: border 0.2s; }
@@ -113,8 +117,7 @@
                         </tr>
                     </thead>
                     <tbody id="log-tbody">
-                        <!-- JS Rendering -->
-                    </tbody>
+                        </tbody>
                 </table>
             </div>
         </div>
@@ -179,7 +182,6 @@
     </div>
 
 
-    <!-- [우측] 관리자 패널 -->
     <div id="admin-panel" class="w-[580px] flex-shrink-0 flex flex-col border-l-4 border-indigo-500 shadow-[-10px_0_20px_rgba(0,0,0,0.5)] z-50 relative">
         
         <div id="custom-modal" class="absolute inset-0 bg-black/80 z-[200] hidden items-center justify-center">
@@ -345,7 +347,6 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -359,7 +360,7 @@
         const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app);
 
         window.firebaseItems = []; window.isFirebaseReady = false;
-        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v12');
+        window.stateDocRef = doc(db, 'signature_boards', 'sig_hunter_state_v13');
 
         window.syncToCloud = async (stateObj) => {
             if(!window.isViewerMode && !window.isLogMode && window.isFirebaseReady) {
@@ -377,7 +378,7 @@
                         window.state = { ...window.state, ...cloudState };
                         if(!window.state.actionLogs) window.state.actionLogs = [];
                     } else {
-                        const saved = localStorage.getItem('sigHunterState_v12');
+                        const saved = localStorage.getItem('sigHunterState_v13');
                         if (saved) { try { window.state = { ...window.state, ...JSON.parse(saved) }; } catch(e){} }
                     }
                 } catch(e) { console.error("Cloud state load error", e); }
@@ -442,7 +443,6 @@
     </script>
 
     <script>
-        // 전역 함수/상태 정의 (안전한 초기화)
         const urlParams = new URLSearchParams(window.location.search);
         window.isViewerMode = urlParams.get('viewer') === 'true';
         window.isLogMode = urlParams.get('log') === 'true';
@@ -519,7 +519,7 @@
 
         window.saveState = function() {
             if (window.isViewerMode || window.isLogMode) return;
-            localStorage.setItem('sigHunterState_v12', JSON.stringify(state)); 
+            localStorage.setItem('sigHunterState_v13', JSON.stringify(state)); 
             if(window.syncToCloud) window.syncToCloud(state); 
         };
 
@@ -964,11 +964,13 @@
                         marqueeContainer.classList.add('center-mode');
                     } else {
                         marqueeText.innerHTML = survivors.map(m => `<span class="inline-block bg-slate-800 border-2 border-yellow-400 text-yellow-300 px-8 py-3 rounded-2xl shadow-[0_0_15px_rgba(250,204,21,0.6)] text-4xl font-black tracking-wider mx-2">${m}</span>`).join('');
-                        if(survivors.length <= 5) {
+                        if(survivors.length <= 3) {
                             marqueeText.classList.remove('animate');
+                            marqueeText.style.animationDuration = '';
                             marqueeContainer.classList.add('center-mode');
                         } else {
                             marqueeText.classList.add('animate');
+                            marqueeText.style.animationDuration = `${survivors.length * 4}s`;
                             marqueeContainer.classList.remove('center-mode');
                         }
                     }
@@ -1117,7 +1119,6 @@
             else { tb.classList.remove('border-red-500', 'bg-red-900/30'); td.classList.remove('text-red-500', 'animate-pulse'); }
         };
 
-        // --- 이벤트 바인딩 처리 (에러 방지용 Optional Chaining 적용) ---
         window.addEventListener('DOMContentLoaded', () => {
             if(!window.isViewerMode && !window.isLogMode) {
                 document.getElementById('btn-toggle-viewer')?.addEventListener('click', () => {
