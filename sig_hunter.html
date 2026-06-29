@@ -1190,12 +1190,14 @@
                 });
 
                 document.getElementById('btn-apply-layout')?.addEventListener('click', () => {
-                    state.cols = DOM.inCols.value; state.rows = DOM.inRows.value; state.bannerText = DOM.inBanner.value;
-                    window.saveState(); 
-                    if(state.currentBroadcastStageId) { window.executeBroadcast(state.currentBroadcastStageId, true); } 
-                    else { document.documentElement.style.setProperty('--grid-cols', state.cols); document.documentElement.style.setProperty('--grid-rows', state.rows); window.updateBannerUI(); }
-                    window.showModal("화면 배열 및 배너가 뷰어에 즉시 동기화되었습니다.");
-                });
+    state.cols = document.getElementById('input-cols').value; 
+    state.rows = document.getElementById('input-rows').value; 
+    state.bannerText = document.getElementById('input-banner').value;
+    window.saveState(); 
+    if(state.currentBroadcastStageId) { window.executeBroadcast(state.currentBroadcastStageId, true); } 
+    else { document.documentElement.style.setProperty('--grid-cols', state.cols); document.documentElement.style.setProperty('--grid-rows', state.rows); window.updateBannerUI(); }
+    window.showModal("화면 배열 및 배너가 뷰어에 즉시 동기화되었습니다.");
+});
 
                 document.querySelectorAll('input[name="gameMode"]')?.forEach(r => r.addEventListener('change', e => {
                     state.gameMode = e.target.value; 
