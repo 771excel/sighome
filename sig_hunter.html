@@ -842,7 +842,7 @@
                 content.innerHTML += `
                     <div class="bg-slate-800 p-2 rounded border border-slate-600 flex flex-col items-center">
                         <div class="w-full aspect-video bg-slate-900 rounded overflow-hidden flex items-center justify-center mb-1">
-                            ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
+                            ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-contain">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
                         </div>
                         <div class="w-full text-center leading-tight mb-1">
                             <div class="text-yellow-400 font-black text-sm">${num}</div>
@@ -911,7 +911,7 @@
                         <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
                             <div class="card-front">
                                 <div class="img-container">
-                                    ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
+                                    ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-contain">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
                                 </div>
                                 <div class="text-container">
                                     <span class="sig-id drop-shadow-sm">[ ${num} ]</span>
@@ -1218,17 +1218,39 @@
                 items = items.filter(i => i.id.toString().includes(searchQuery) || i.name.includes(searchQuery));
             }
 
+            // 🟢 다른 단계에서 사용중인 시그니처 확인
+            const usedInOtherStages = {};
+            state.stages.forEach(s => {
+                if (s.id !== activeModalStageId) {
+                    s.previewNumbers.forEach(n => {
+                        usedInOtherStages[n] = s.name;
+                    });
+                }
+            });
+
             grid.innerHTML = items.map(item => {
                 const num = parseInt(item.id);
                 const isChecked = stage.previewNumbers.includes(num);
+                const conflictStageName = usedInOtherStages[num];
+                const isDisabled = !!conflictStageName;
+                
                 const imgSrc = item.isFrozen && item.frozenDataUrl ? item.frozenDataUrl : (item.mediaUrl || item.imgUrl);
                 const name = item.name.replace(/^\d+[_.\-\s]+/, '');
 
+                const labelClass = isDisabled 
+                    ? 'flex flex-col items-center p-2 rounded-xl border-2 border-slate-800 bg-slate-900 opacity-50 cursor-not-allowed relative'
+                    : `flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer relative ${isChecked ? 'bg-blue-900/40 border-blue-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`;
+
                 return `
-                    <label class="flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer relative ${isChecked ? 'bg-blue-900/40 border-blue-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}">
-                        <input type="checkbox" class="absolute top-2 right-2 w-5 h-5 accent-blue-600" ${isChecked ? 'checked' : ''} onchange="window.toggleSignatureToStage(${num}, this.checked)">
-                        <div class="w-full aspect-square bg-slate-950 rounded mb-2 overflow-hidden flex items-center justify-center">
-                            ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-[10px] text-red-500">No Img</span>'}
+                    <label class="${labelClass}">
+                        <input type="checkbox" class="absolute top-2 right-2 w-5 h-5 accent-blue-600 z-10" 
+                            ${isChecked ? 'checked' : ''} 
+                            ${isDisabled ? 'disabled' : ''} 
+                            onchange="window.toggleSignatureToStage(${num}, this.checked)">
+                            
+                        <div class="w-full aspect-video bg-slate-950 rounded mb-2 overflow-hidden flex items-center justify-center relative">
+                            ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-contain">` : '<span class="text-[10px] text-red-500">No Img</span>'}
+                            ${isDisabled ? `<div class="absolute inset-0 bg-black/70 flex items-center justify-center text-center p-1"><span class="text-yellow-400 font-bold text-[10px] leading-tight">${conflictStageName}<br>사용중</span></div>` : ''}
                         </div>
                         <div class="text-yellow-400 font-black text-sm">${num}</div>
                         <div class="text-white text-[10px] truncate w-full text-center">${name}</div>
