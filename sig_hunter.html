@@ -100,13 +100,16 @@
         .admin-input { background: #1e293b; color: white; border: 1px solid #475569; border-radius: 0.25rem; outline: none; padding: 0.25rem; font-size: 0.875rem; text-align: center; transition: border 0.2s; }
         .admin-input:focus { border-color: #3b82f6; }
         .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll-x::-webkit-scrollbar { height: 6px; }
+        .custom-scroll-x::-webkit-scrollbar-track { background: #1e293b; }
+        .custom-scroll-x::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
     </style>
 </head>
 <body class="flex w-full h-screen relative">
 
     <div id="full-stage-manager" class="fixed inset-0 bg-slate-950/95 z-[300] hidden flex-col backdrop-blur-md">
         <div class="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-900 shrink-0">
-            <h2 class="text-2xl font-black text-white flex items-center gap-2">🖥️ 단계별 통합 관리 센터</h2>
+            <h2 class="text-2xl font-black text-white flex items-center gap-2">🖥️ 단계별 시그 통합 관리창</h2>
             <button onclick="window.closeStageManager()" class="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded shadow text-sm">닫기 ✖</button>
         </div>
         
@@ -120,17 +123,34 @@
             </div>
             
             <div class="flex-1 flex flex-col bg-slate-800">
-                <div class="p-4 border-b border-slate-700 bg-slate-900 flex justify-between items-center shrink-0">
-                    <div>
-                        <h3 id="modal-current-stage-title" class="text-xl font-black text-yellow-400">선택된 단계가 없습니다</h3>
-                        <p class="text-slate-400 text-sm font-bold mt-1">체크박스를 클릭하여 해당 단계에 시그니처를 추가/제거하세요. (실시간 저장됨)</p>
+                <!-- 선택된 단계의 시그니처 목록 뷰어 영역 (상단) -->
+                <div class="p-4 border-b border-slate-700 bg-slate-900 shrink-0 flex flex-col gap-3">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h3 id="modal-current-stage-title" class="text-xl font-black text-yellow-400">선택된 단계가 없습니다</h3>
+                            <p class="text-slate-400 text-sm font-bold mt-1">체크박스를 클릭하여 해당 단계에 시그니처를 추가/제거하세요. (실시간 저장됨)</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" id="modal-search-input" class="admin-input w-48 text-sm px-3" placeholder="번호 또는 이름 검색" onkeyup="window.filterModalSignatures()">
+                        </div>
                     </div>
-                    <div class="flex gap-2">
-                        <input type="text" id="modal-search-input" class="admin-input w-48 text-sm px-3" placeholder="번호 또는 이름 검색" onkeyup="window.filterModalSignatures()">
+                    
+                    <!-- 현재 단계 선택 시그니처 썸네일 바 -->
+                    <div class="bg-slate-950/50 rounded-xl p-3 border border-slate-700">
+                        <div class="text-xs font-bold text-slate-400 mb-2 flex justify-between">
+                            <span>✅ 현재 단계에 포함된 시그니처</span>
+                            <span id="selected-sig-count" class="text-yellow-400">0개</span>
+                        </div>
+                        <div id="selected-sig-bar" class="flex gap-2 overflow-x-auto custom-scroll-x pb-2 min-h-[80px]">
+                            <!-- 선택된 시그니처 렌더링 영역 -->
+                        </div>
                     </div>
                 </div>
+
+                <!-- 전체 시그니처 선택 영역 (하단) -->
                 <div id="modal-signature-grid" class="flex-1 overflow-y-auto p-6 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 content-start custom-scroll">
-                    </div>
+                    <!-- 체크박스 리스트 렌더링 위치 -->
+                </div>
             </div>
         </div>
     </div>
@@ -1206,10 +1226,44 @@
             window.renderModalSignatures();
         };
 
+        window.renderSelectedSigBar = function(stage) {
+            const bar = document.getElementById('selected-sig-bar');
+            const countEl = document.getElementById('selected-sig-count');
+            if(!bar || !countEl) return;
+            
+            countEl.innerText = `${stage.previewNumbers.length}개`;
+            
+            if(stage.previewNumbers.length === 0) {
+                bar.innerHTML = '<div class="text-slate-500 text-sm flex items-center justify-center w-full h-full italic">선택된 시그니처가 없습니다. 아래 목록에서 체크하여 추가해주세요.</div>';
+                return;
+            }
+
+            bar.innerHTML = stage.previewNumbers.map(num => {
+                const fbItem = window.firebaseItems.find(i => i.id === num);
+                const imgSrc = fbItem ? (fbItem.isFrozen && fbItem.frozenDataUrl ? fbItem.frozenDataUrl : (fbItem.mediaUrl || fbItem.imgUrl)) : '';
+                const name = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름 없음';
+                
+                return `
+                    <div class="flex-shrink-0 w-20 flex flex-col items-center p-1.5 bg-slate-900 rounded-lg border border-slate-700 relative group cursor-pointer" onclick="window.toggleSignatureToStage(${num}, false)">
+                        <div class="absolute inset-0 bg-red-600/80 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity z-10">
+                            <span class="text-white font-bold text-xs">빼기 ✖</span>
+                        </div>
+                        <div class="w-full aspect-video bg-slate-950 rounded mb-1 overflow-hidden flex items-center justify-center">
+                            ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-contain">` : '<span class="text-[8px] text-red-500">No Img</span>'}
+                        </div>
+                        <div class="text-yellow-400 font-black text-xs leading-none">${num}</div>
+                        <div class="text-slate-300 text-[9px] truncate w-full text-center leading-tight mt-0.5">${name}</div>
+                    </div>
+                `;
+            }).join('');
+        };
+
         window.renderModalSignatures = function(searchQuery = '') {
             if(!activeModalStageId) return;
             const stage = state.stages.find(s => s.id === activeModalStageId);
             const grid = document.getElementById('modal-signature-grid');
+            
+            window.renderSelectedSigBar(stage); // 상단 선택된 목록 갱신
             
             // Firebase에 등록된 전체 리스트를 번호순으로 정렬
             let items = [...window.firebaseItems].sort((a,b) => parseInt(a.id) - parseInt(b.id));
@@ -1239,7 +1293,7 @@
 
                 const labelClass = isDisabled 
                     ? 'flex flex-col items-center p-2 rounded-xl border-2 border-slate-800 bg-slate-900 opacity-50 cursor-not-allowed relative'
-                    : `flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer relative ${isChecked ? 'bg-blue-900/40 border-blue-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`;
+                    : `flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer relative ${isChecked ? 'bg-blue-900/40 border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`;
 
                 return `
                     <label class="${labelClass}">
@@ -1272,6 +1326,7 @@
             
             window.saveState();
             window.renderModalStageList(); // 좌측 리스트의 개수 카운트 갱신
+            window.renderModalSignatures(document.getElementById('modal-search-input').value.trim()); // 현재 체크박스 및 상단 바 즉시 반영
         };
 
         window.filterModalSignatures = function() {
