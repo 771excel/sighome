@@ -14,10 +14,10 @@
         :root { --grid-cols: 5; --grid-rows: 2; }
         html, body { background-color: transparent !important; font-family: 'GmarketSans', sans-serif; margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; user-select: none; }
         
-        body.viewer-mode #admin-panel { display: none !important; }
+        body.viewer-mode #admin-panel, body.viewer-mode #full-stage-manager { display: none !important; }
         body.viewer-mode #viewer-container { width: 100vw !important; max-width: 100vw !important; padding: 2rem !important; }
 
-        body.log-mode #admin-panel, body.log-mode #viewer-container { display: none !important; }
+        body.log-mode #admin-panel, body.log-mode #viewer-container, body.log-mode #full-stage-manager { display: none !important; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
@@ -103,6 +103,37 @@
     </style>
 </head>
 <body class="flex w-full h-screen relative">
+
+    <div id="full-stage-manager" class="fixed inset-0 bg-slate-950/95 z-[300] hidden flex-col backdrop-blur-md">
+        <div class="flex justify-between items-center p-4 border-b border-slate-700 bg-slate-900 shrink-0">
+            <h2 class="text-2xl font-black text-white flex items-center gap-2">🖥️ 단계별 통합 관리 센터</h2>
+            <button onclick="window.closeStageManager()" class="bg-red-600 hover:bg-red-500 text-white font-bold px-6 py-2 rounded shadow text-sm">닫기 ✖</button>
+        </div>
+        
+        <div class="flex flex-1 overflow-hidden">
+            <div class="w-1/4 bg-slate-900 border-r border-slate-700 flex flex-col">
+                <div class="p-3 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+                    <span class="text-white font-bold">단계 목록</span>
+                    <button onclick="window.addNewStageFromModal()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3 py-1.5 rounded shadow">추가 +</button>
+                </div>
+                <div id="modal-stage-list" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scroll"></div>
+            </div>
+            
+            <div class="flex-1 flex flex-col bg-slate-800">
+                <div class="p-4 border-b border-slate-700 bg-slate-900 flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 id="modal-current-stage-title" class="text-xl font-black text-yellow-400">선택된 단계가 없습니다</h3>
+                        <p class="text-slate-400 text-sm font-bold mt-1">체크박스를 클릭하여 해당 단계에 시그니처를 추가/제거하세요. (실시간 저장됨)</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="modal-search-input" class="admin-input w-48 text-sm px-3" placeholder="번호 또는 이름 검색" onkeyup="window.filterModalSignatures()">
+                    </div>
+                </div>
+                <div id="modal-signature-grid" class="flex-1 overflow-y-auto p-6 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3 content-start custom-scroll">
+                    </div>
+            </div>
+        </div>
+    </div>
 
     <div id="log-container" class="w-full h-full bg-slate-900 text-slate-200 overflow-y-auto hidden">
         <div class="max-w-5xl mx-auto p-8">
@@ -255,12 +286,12 @@
                     <span id="db-status-badge" class="px-2 py-1 text-[10px] font-bold rounded-full bg-slate-700 text-slate-300">연결 대기중</span>
                 </div>
                 <div class="grid grid-cols-2 gap-2 mt-2 border-t border-slate-700 pt-2">
-                    <button id="new-game-btn" class="bg-red-900 hover:bg-red-800 text-red-100 font-bold py-1.5 rounded text-[11px] shadow border border-red-700">🔄 전체 기록 초기화</button>
-                    <button id="auto-generate-btn" class="bg-indigo-900 hover:bg-indigo-800 text-indigo-100 font-bold py-1.5 rounded text-[11px] shadow border border-indigo-700">✨ 기본값 리셋</button>
+                    <button id="new-game-btn" title="[전체 초기화] 진행된 솔드아웃, 획득 기록을 모두 지우고 빈 상태로 되돌립니다." class="bg-red-900 hover:bg-red-800 text-red-100 font-bold py-1.5 rounded text-[11px] shadow border border-red-700">🔄 전체 기록 초기화</button>
+                    <button id="auto-generate-btn" title="[기본값 리셋] 현재 단계 설정과 배수 등을 모두 지우고 내장된 기본 세팅으로 덮어씌웁니다." class="bg-indigo-900 hover:bg-indigo-800 text-indigo-100 font-bold py-1.5 rounded text-[11px] shadow border border-indigo-700">✨ 기본값 리셋</button>
                 </div>
                 <div class="grid grid-cols-2 gap-2 mt-2">
-                    <button id="save-log-btn" class="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-bold py-1.5 rounded text-[11px] shadow border border-emerald-600">📝 내역 다운</button>
-                    <button id="check-dup-btn" class="bg-rose-900 hover:bg-rose-800 text-rose-100 font-bold py-1.5 rounded text-[11px] shadow border border-rose-700">🔍 중복 번호 검사</button>
+                    <button id="save-log-btn" title="[내역 다운] 현재까지 진행된 판매 및 멤버 획득 내역을 텍스트 파일로 저장합니다." class="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-bold py-1.5 rounded text-[11px] shadow border border-emerald-600">📝 내역 다운</button>
+                    <button id="check-dup-btn" title="[중복 검사] 여러 단계의 대기목록에 동일한 시그니처 번호가 중복으로 들어가 있는지 검사합니다." class="bg-rose-900 hover:bg-rose-800 text-rose-100 font-bold py-1.5 rounded text-[11px] shadow border border-rose-700">🔍 중복 번호 검사</button>
                 </div>
                 <div class="grid grid-cols-2 gap-2 mt-2">
                     <button id="save-file-btn" class="bg-slate-700 hover:bg-slate-600 text-white font-bold py-1.5 rounded text-[11px] shadow border border-slate-600">💾 설정값 저장하기</button>
@@ -344,7 +375,10 @@
             <div>
                 <div class="flex justify-between items-center mb-3 mt-4">
                     <label class="block text-sm font-bold text-indigo-300">🎲 단계별 설정 및 송출</label>
-                    <button id="btn-add-stage" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded shadow">➕ 단계 추가</button>
+                    <div class="flex gap-1">
+                        <button onclick="window.openStageManager()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1 rounded shadow transition">💻 큰 화면으로 관리</button>
+                        <button id="btn-add-stage" class="text-xs bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-1 rounded shadow">➕ 단계 추가</button>
+                    </div>
                 </div>
                 <button id="batch-generate-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-3 mb-4 rounded-xl shadow border border-blue-400 text-sm">전체 단계 일괄 랜덤 생성 (중복 방지)</button>
                 <div id="stages-container" class="space-y-4 pb-20"></div>
@@ -852,47 +886,56 @@
             const grid = document.getElementById('card-grid');
             if(grid) grid.innerHTML = '';
             
-            stage.broadcastNumbers.forEach((num, i) => {
-                const fbItem = window.firebaseItems.find(item => item.id === num);
-                const imgSrc = fbItem ? (fbItem.isFrozen && fbItem.frozenDataUrl ? fbItem.frozenDataUrl : (fbItem.mediaUrl || fbItem.imgUrl)) : '';
-                const sigName = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름 없음';
-                
-                const isSoldOut = state.globalSoldOutList.includes(num);
-                const isClaimed = !!state.claimedCards[num];
-                const isRevealed = state.revealedCards.includes(num);
-                const isVIP = num >= 10000;
-                const multi = state.multipliers[num] || 1;
+            const totalCells = parseInt(state.cols) * parseInt(state.rows);
+            
+            for(let i = 0; i < totalCells; i++) {
+                if (i < stage.broadcastNumbers.length) {
+                    const num = stage.broadcastNumbers[i];
+                    const fbItem = window.firebaseItems.find(item => item.id === num);
+                    const imgSrc = fbItem ? (fbItem.isFrozen && fbItem.frozenDataUrl ? fbItem.frozenDataUrl : (fbItem.mediaUrl || fbItem.imgUrl)) : '';
+                    const sigName = fbItem ? fbItem.name.replace(/^\d+[_.\-\s]+/, '') : '이름 없음';
+                    
+                    const isSoldOut = state.globalSoldOutList.includes(num);
+                    const isClaimed = !!state.claimedCards[num];
+                    const isRevealed = state.revealedCards.includes(num);
+                    const isVIP = num >= 10000;
+                    const multi = state.multipliers[num] || 1;
 
-                const wrapper = document.createElement('div');
-                wrapper.className = `card-wrapper cursor-pointer w-full h-full relative ${isVIP ? 'vip-glow' : ''} ${isSoldOut ? 'is-sold-out' : ''} ${isClaimed ? 'is-claimed' : ''} ${isRevealed ? 'is-revealed' : ''}`;
-                wrapper.dataset.number = num; 
-                
-                if(!window.isViewerMode && !window.isLogMode) wrapper.onclick = () => window.handleCardClick(num, wrapper);
+                    const wrapper = document.createElement('div');
+                    wrapper.className = `card-wrapper cursor-pointer w-full h-full relative ${isVIP ? 'vip-glow' : ''} ${isSoldOut ? 'is-sold-out' : ''} ${isClaimed ? 'is-claimed' : ''} ${isRevealed ? 'is-revealed' : ''}`;
+                    wrapper.dataset.number = num; 
+                    
+                    if(!window.isViewerMode && !window.isLogMode) wrapper.onclick = () => window.handleCardClick(num, wrapper);
 
-                wrapper.innerHTML = `
-                    <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
-                        <div class="card-front">
-                            <div class="img-container">
-                                ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
-                            </div>
-                            <div class="text-container">
-                                <span class="sig-id drop-shadow-sm">[ ${num} ]</span>
-                                <div class="sig-name-container">
-                                    <span class="sig-name-text">${sigName}</span>
+                    wrapper.innerHTML = `
+                        <div class="card-inner ${isRestore ? '' : 'is-flipped'}" style="transition-delay: ${i * 100}ms">
+                            <div class="card-front">
+                                <div class="img-container">
+                                    ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-red-500 font-bold text-[10px]">No Img</span>'}
+                                </div>
+                                <div class="text-container">
+                                    <span class="sig-id drop-shadow-sm">[ ${num} ]</span>
+                                    <div class="sig-name-container">
+                                        <span class="sig-name-text">${sigName}</span>
+                                    </div>
                                 </div>
                             </div>
+                            <div class="card-back"><span class="text-6xl font-black text-slate-500 drop-shadow-md">?</span></div>
                         </div>
-                        <div class="card-back"><span class="text-6xl font-black text-slate-500 drop-shadow-md">?</span></div>
-                    </div>
-                    <div class="sold-out-stamp">SOLD OUT</div>
-                    <div class="claimed-overlay">
-                        <div class="claimed-badge">${state.claimedCards[num] || ''}</div>
-                        ${state.gameMode === 'hunter' ? `<div class="multiplier-stamp">x${multi}</div>` : ''}
-                    </div>
-                `;
-                if(grid) grid.appendChild(wrapper);
-                if(!isRestore) setTimeout(() => { const inner = wrapper.querySelector('.card-inner'); if(inner) inner.classList.remove('is-flipped'); }, 100);
-            });
+                        <div class="sold-out-stamp">SOLD OUT</div>
+                        <div class="claimed-overlay">
+                            <div class="claimed-badge">${state.claimedCards[num] || ''}</div>
+                            ${state.gameMode === 'hunter' ? `<div class="multiplier-stamp">x${multi}</div>` : ''}
+                        </div>
+                    `;
+                    if(grid) grid.appendChild(wrapper);
+                    if(!isRestore) setTimeout(() => { const inner = wrapper.querySelector('.card-inner'); if(inner) inner.classList.remove('is-flipped'); }, 100);
+                } else {
+                    const emptySlot = document.createElement('div');
+                    emptySlot.className = "w-full h-full bg-transparent";
+                    if(grid) grid.appendChild(emptySlot);
+                }
+            }
 
             if(!isRestore) {
                 clearInterval(window.timerInterval);
@@ -1122,6 +1165,96 @@
             td.innerText = `${m}:${s}`;
             if(state.timer.remaining > 0 && state.timer.remaining <= 60) { tb.classList.add('border-red-500', 'bg-red-900/30'); td.classList.add('text-red-500', 'animate-pulse'); } 
             else { tb.classList.remove('border-red-500', 'bg-red-900/30'); td.classList.remove('text-red-500', 'animate-pulse'); }
+        };
+
+        // 🟢 단계 통합 관리자 로직
+        let activeModalStageId = null;
+
+        window.openStageManager = function() {
+            if (!window.isFirebaseReady) return window.showModal("DB 로딩 중입니다. 잠시 후 시도해주세요.");
+            document.getElementById('full-stage-manager').classList.replace('hidden', 'flex');
+            window.renderModalStageList();
+            if(state.stages.length > 0) window.selectModalStage(state.stages[0].id);
+        };
+
+        window.closeStageManager = function() {
+            document.getElementById('full-stage-manager').classList.replace('flex', 'hidden');
+            window.renderAdminStages(); // 모달을 닫을 때 메인 패널 화면 갱신
+        };
+
+        window.addNewStageFromModal = function() {
+            const newId = 'st_' + Date.now();
+            state.stages.push({ id: newId, name: '신규단계', min: 1000, max: 2000, count: 10, mandatory: "", high: 0, timerMin: 10, timerSec: 0, previewNumbers: [], broadcastNumbers: [] });
+            window.saveState(); window.renderModalStageList();
+        };
+
+        window.renderModalStageList = function() {
+            const list = document.getElementById('modal-stage-list');
+            list.innerHTML = state.stages.map(s => `
+                <div onclick="window.selectModalStage('${s.id}')" class="p-3 rounded cursor-pointer border-2 transition-all ${activeModalStageId === s.id ? 'bg-indigo-900 border-indigo-500' : 'bg-slate-800 border-transparent hover:bg-slate-700'}">
+                    <div class="text-white font-bold text-sm">${s.name}</div>
+                    <div class="text-slate-400 text-xs mt-1">포함된 시그: <span class="text-yellow-400">${s.previewNumbers.length}</span>개</div>
+                </div>
+            `).join('');
+        };
+
+        window.selectModalStage = function(id) {
+            activeModalStageId = id;
+            const stage = state.stages.find(s => s.id === id);
+            document.getElementById('modal-current-stage-title').innerText = `[${stage.name}] 시그니처 편성`;
+            window.renderModalStageList(); // 선택된 스타일(색상) 갱신
+            window.renderModalSignatures();
+        };
+
+        window.renderModalSignatures = function(searchQuery = '') {
+            if(!activeModalStageId) return;
+            const stage = state.stages.find(s => s.id === activeModalStageId);
+            const grid = document.getElementById('modal-signature-grid');
+            
+            // Firebase에 등록된 전체 리스트를 번호순으로 정렬
+            let items = [...window.firebaseItems].sort((a,b) => parseInt(a.id) - parseInt(b.id));
+            
+            if(searchQuery) {
+                items = items.filter(i => i.id.toString().includes(searchQuery) || i.name.includes(searchQuery));
+            }
+
+            grid.innerHTML = items.map(item => {
+                const num = parseInt(item.id);
+                const isChecked = stage.previewNumbers.includes(num);
+                const imgSrc = item.isFrozen && item.frozenDataUrl ? item.frozenDataUrl : (item.mediaUrl || item.imgUrl);
+                const name = item.name.replace(/^\d+[_.\-\s]+/, '');
+
+                return `
+                    <label class="flex flex-col items-center p-2 rounded-xl border-2 transition-all cursor-pointer relative ${isChecked ? 'bg-blue-900/40 border-blue-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}">
+                        <input type="checkbox" class="absolute top-2 right-2 w-5 h-5 accent-blue-600" ${isChecked ? 'checked' : ''} onchange="window.toggleSignatureToStage(${num}, this.checked)">
+                        <div class="w-full aspect-square bg-slate-950 rounded mb-2 overflow-hidden flex items-center justify-center">
+                            ${imgSrc ? `<img src="${imgSrc}" class="w-full h-full object-cover">` : '<span class="text-[10px] text-red-500">No Img</span>'}
+                        </div>
+                        <div class="text-yellow-400 font-black text-sm">${num}</div>
+                        <div class="text-white text-[10px] truncate w-full text-center">${name}</div>
+                    </label>
+                `;
+            }).join('');
+        };
+
+        window.toggleSignatureToStage = function(num, isChecked) {
+            const stage = state.stages.find(s => s.id === activeModalStageId);
+            if(isChecked) {
+                if(!stage.previewNumbers.includes(num)) stage.previewNumbers.push(num);
+            } else {
+                stage.previewNumbers = stage.previewNumbers.filter(n => n !== num);
+            }
+            // 오름차순 재정렬 및 배수 기본값 할당
+            stage.previewNumbers.sort((a,b) => a - b);
+            if(!state.multipliers[num]) state.multipliers[num] = 1;
+            
+            window.saveState();
+            window.renderModalStageList(); // 좌측 리스트의 개수 카운트 갱신
+        };
+
+        window.filterModalSignatures = function() {
+            const val = document.getElementById('modal-search-input').value.trim();
+            window.renderModalSignatures(val);
         };
 
         // --- 이벤트 바인딩 처리 ---
