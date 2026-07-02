@@ -473,7 +473,32 @@
                     </div>
                 </div>
 
-                <template x-if="newItems.length > 0">
+                <div class="flex gap-2 overflow-x-auto pb-4 mb-6 avoid-break w-full select-none" style="scrollbar-width: none;" x-show="groups.length > 0 || members.length > 0">
+                    <button @click="viewerSelectedGroup = 'all'"
+                            class="px-5 py-2 rounded-full font-black text-sm shrink-0 transition-all shadow-sm border"
+                            :class="viewerSelectedGroup === 'all' ? 'bg-blue-600 text-white border-blue-600 shadow-blue-500/30' : (isDarkMode ? 'bg-gray-800 text-gray-400 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100')">
+                        전체 보기
+                    </button>
+                    
+                    <template x-for="group in groups" :key="group.id">
+                        <button @click="viewerSelectedGroup = group.id"
+                                x-show="getItemsByGroup(group.id).length > 0"
+                                class="px-5 py-2 rounded-full font-bold text-sm shrink-0 transition-all shadow-sm border flex items-center gap-2"
+                                :class="viewerSelectedGroup === group.id ? 'text-white' : (isDarkMode ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100')"
+                                :style="viewerSelectedGroup === group.id ? `background-color: ${group.color || '#6B7280'}; border-color: ${group.color || '#6B7280'}; box-shadow: 0 4px 12px ${group.color}40;` : ''">
+                            <span class="w-3 h-3 rounded-full inline-block border border-white/50" :style="viewerSelectedGroup !== group.id ? `background-color: ${group.color || '#6B7280'};` : 'background-color: white;'"></span>
+                            <span x-text="group.name"></span>
+                        </button>
+                    </template>
+                    
+                    <button @click="viewerSelectedGroup = 'personal'"
+                            x-show="items.filter(i => i.isPersonal).length > 0"
+                            class="px-5 py-2 rounded-full font-bold text-sm shrink-0 transition-all shadow-sm border flex items-center gap-2"
+                            :class="viewerSelectedGroup === 'personal' ? 'bg-blue-500 text-white border-blue-500 shadow-blue-500/30' : (isDarkMode ? 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100')">
+                        <i class="ph-fill ph-crown text-lg"></i> 전체 개인 시그
+                    </button>
+                </div>
+                <template x-if="newItems.length > 0 && viewerSelectedGroup === 'all'">
                     <div class="mb-10 relative avoid-break z-10">
                         <div class="absolute -inset-1 bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-500 rounded-2xl blur-md opacity-40 animate-pulse"></div>
                         <div class="relative rounded-xl p-6 border-2 transition-colors duration-300 shadow-xl" :class="isDarkMode ? 'bg-gray-800/95 border-yellow-500/70' : 'bg-yellow-50 border-yellow-400'">
@@ -514,7 +539,7 @@
                     </div>
                 </template>
 
-                <template x-if="events.length > 0">
+                <template x-if="events.length > 0 && viewerSelectedGroup === 'all'">
                     <div class="mb-10 space-y-6">
                         <template x-for="event in events" :key="event.id">
                             <div class="w-full relative avoid-break z-10" x-show="getEventItems(event.targets).length > 0">
@@ -563,7 +588,7 @@
 
                 <div class="space-y-12">
                     <template x-for="group in groups" :key="group.id">
-                        <div x-show="getItemsByGroup(group.id).length > 0" class="rounded-xl p-4 sm:p-6 border shadow-lg transition-colors duration-300 relative overflow-hidden" :class="isDarkMode ? 'bg-panel border-gray-800' : 'bg-white border-gray-200'" :style="`border-top-width: 5px; border-top-color: ${group.color || '#6B7280'};`">
+                        <div x-show="getItemsByGroup(group.id).length > 0 && (viewerSelectedGroup === 'all' || viewerSelectedGroup === group.id)" class="rounded-xl p-4 sm:p-6 border shadow-lg transition-colors duration-300 relative overflow-hidden" :class="isDarkMode ? 'bg-panel border-gray-800' : 'bg-white border-gray-200'" :style="`border-top-width: 5px; border-top-color: ${group.color || '#6B7280'};`">
                             <h2 class="text-xl sm:text-2xl font-black mb-5 border-b-2 pb-3 avoid-break flex items-center gap-3 transition-colors duration-300" :class="isDarkMode ? 'text-gray-100 border-gray-700' : 'text-gray-800 border-gray-200'">
                                 <span class="w-4 h-4 rounded-full inline-block shadow-sm shrink-0" :style="`background-color: ${group.color || '#6B7280'};`"></span>
                                 <span>
@@ -603,7 +628,7 @@
 
                 <div class="mt-12 mb-4 space-y-6">
                     <template x-for="member in members" :key="member.id">
-                        <div x-show="getPersonalItemsByMember(member.id).length > 0 || !isViewerMode" class="border-2 rounded-xl p-4 sm:p-6 shadow-lg relative overflow-hidden transition-colors duration-300" :class="isDarkMode ? 'bg-blue-900/30 border-blue-500/50' : 'bg-blue-50 border-blue-300'">
+                        <div x-show="(getPersonalItemsByMember(member.id).length > 0 || !isViewerMode) && (viewerSelectedGroup === 'all' || viewerSelectedGroup === 'personal')" class="border-2 rounded-xl p-4 sm:p-6 shadow-lg relative overflow-hidden transition-colors duration-300" :class="isDarkMode ? 'bg-blue-900/30 border-blue-500/50' : 'bg-blue-50 border-blue-300'">
                             <div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
                             <div class="flex items-center gap-3 mb-5 border-b pb-3 relative z-10 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-blue-500/30' : 'border-blue-300'">
                                 <i class="ph-fill ph-crown text-blue-500 text-3xl"></i>
@@ -650,7 +675,7 @@
                         </div>
                     </template>
 
-                    <div x-show="getUnassignedPersonalItems().length > 0" class="border rounded-xl p-4 sm:p-6 shadow-lg transition-colors duration-300" :class="isDarkMode ? 'bg-gray-800/80 border-gray-600' : 'bg-white border-gray-300'">
+                    <div x-show="getUnassignedPersonalItems().length > 0 && (viewerSelectedGroup === 'all' || viewerSelectedGroup === 'personal')" class="border rounded-xl p-4 sm:p-6 shadow-lg transition-colors duration-300" :class="isDarkMode ? 'bg-gray-800/80 border-gray-600' : 'bg-white border-gray-300'">
                         <div class="flex items-center gap-3 mb-5 border-b pb-3 avoid-break transition-colors duration-300" :class="isDarkMode ? 'border-gray-600' : 'border-gray-300'">
                             <i class="ph-fill ph-user text-gray-400 text-2xl"></i>
                             <h2 class="text-xl sm:text-2xl font-bold transition-colors duration-300" :class="isDarkMode ? 'text-gray-300' : 'text-gray-800'">
