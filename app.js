@@ -20,6 +20,8 @@ document.addEventListener('alpine:init', () => {
         isDarkMode: true,
         isViewerMode: false,
         
+        viewerSelectedGroup: 'all', // 그룹 필터용 상태 변수 추가
+        
         isAuthenticated: false,
         adminPassword: '',
 
@@ -400,7 +402,6 @@ document.addEventListener('alpine:init', () => {
         displayImageUrl(url) {
             if (!url) return '';
             if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-            // 뷰어 메인 화면 로딩 (애니메이션 유지 WebP)
             return `https://wsrv.nl/?url=${encodeURIComponent(url)}&output=webp&n=-1&q=80`;
         },
 
@@ -848,7 +849,7 @@ document.addEventListener('alpine:init', () => {
                     audio.play(); 
                 } 
                 else audio.pause();
-            } else this.showToast("오디오 파일을 찾을 수 없습니다.");
+            } else this.showToast("오디오 파일을 찾을 수 무습니다.");
         },
 
         findGroupForId(id) { const g = this.groups.find(g => g.start !== null && g.end !== null && id >= g.start && id <= g.end); return g ? g.id : 'g_default'; },
